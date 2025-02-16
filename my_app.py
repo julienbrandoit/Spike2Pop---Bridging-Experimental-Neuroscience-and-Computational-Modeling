@@ -43,6 +43,12 @@ class CSVApp:
         # Initialize variable to store selected interpreter path; default to the running interpreter.
         self.python_env = sys.executable
 
+        # Default paths for model weights and args
+        self.base_model_weights_path = "models/base_model_weights.pth"
+        self.base_model_args_path = "models/base_model_args.json"
+        self.da_adapters_weights_path = "models/da_adapters_weights.pth"
+        self.da_adapters_args_path = "models/da_adapters_args.json"
+
         # ----------------------------
         # Header: Logo and Title
         # ----------------------------
@@ -163,6 +169,10 @@ class CSVApp:
             base_dir = os.path.dirname(os.path.abspath(__file__))
         except NameError:
             base_dir = os.getcwd()
+
+        log_text = "==\t==\t==\t==\nSetting up the application from the config file...\n=\t=\t=\t="
+        self.update_log(log_text)
+
         config_path = os.path.join(base_dir, "config.json")
         if os.path.exists(config_path):
             try:
@@ -172,9 +182,29 @@ class CSVApp:
                     self.python_env = config_data["python_env"]
                     if hasattr(self, "env_label"):
                         self.env_label.config(text=os.path.basename(self.python_env))
-                    self.update_log(f"Loaded default Python environment from config: {self.python_env}")
+                    self.update_log(f"Loaded default Python environment from config: {self.python_env}\n")
+
+                if "base_model_weights_path" in config_data:
+                    self.base_model_weights_path = config_data["base_model_weights_path"]
+                    self.update_log(f"Loaded default base model weights path from config: {self.base_model_weights_path}\n")
+
+                if "base_model_args_path" in config_data:
+                    self.base_model_args_path = config_data["base_model_args_path"]
+                    self.update_log(f"Loaded default base model args path from config: {self.base_model_args_path}\n")
+
+                if "da_adapters_weights_path" in config_data:
+                    self.da_adapters_weights_path = config_data["da_adapters_weights_path"]
+                    self.update_log(f"Loaded default DA adapters weights path from config: {self.da_adapters_weights_path}\n")
+
+                if "da_adapters_args_path" in config_data:
+                    self.da_adapters_args_path = config_data["da_adapters_args_path"]
+                    self.update_log(f"Loaded default DA adapters args path from config: {self.da_adapters_args_path}\n")
+
             except Exception as e:
                 self.update_log(f"Error loading config: {str(e)}")
+
+        log_text = "=\t=\t=\t=\nApplication setup complete.\n==\t==\t==\t=="
+        self.update_log(log_text)
 
     def check_gpu_availability(self):
         """
@@ -196,23 +226,16 @@ class CSVApp:
         if available:
             self.use_gpu.set(True)
             self.gpu_checkbox.config(state=tk.NORMAL)
-            self.update_log("CUDA is available. 'Use GPU' enabled and checked.")
+            self.update_log("\nCUDA is available. 'Use GPU' enabled and checked.\n")
         else:
             self.use_gpu.set(False)
             self.gpu_checkbox.config(state=tk.DISABLED)
-            self.update_log("CUDA not available or PyTorch not installed. 'Use GPU' disabled.")
+            self.update_log("\nCUDA not available or PyTorch not installed. 'Use GPU' disabled.\n")
 
     def show_help(self):
         help_text = (
             "Instructions:\n"
-            "1. Load a CSV file using the 'Load CSV' button or drag and drop it onto the window.\n"
-            "2. Select a model (STG or DA).\n"
-            "3. Choose the number of CPUs.\n"
-            "4. (Optional) Select a Python environment that has the required dependencies.\n"
-            "5. If PyTorch with CUDA is available in the selected environment, you can choose to use GPU.\n"
-            "6. Click 'Use the pipeline' to start processing.\n"
-            "7. You can kill the process if needed and save the results once done.\n"
-            "8. Use 'Save Default Env' to store the current Python environment in config.json."
+            "1. TODO\n"
         )
         messagebox.showinfo("Help", help_text)
 
@@ -247,7 +270,9 @@ class CSVApp:
 
     def save_config(self):
         """Saves the current Python environment path to config.json in the app folder."""
-        config_data = {"python_env": self.python_env}
+        config_data = {"python_env": self.python_env, "base_model_weights_path": self.base_model_weights_path,
+                       "base_model_args_path": self.base_model_args_path, "da_adapters_weights_path": self.da_adapters_weights_path,
+                       "da_adapters_args_path": self.da_adapters_args_path}
         try:
             base_dir = os.path.dirname(os.path.abspath(__file__))
         except NameError:

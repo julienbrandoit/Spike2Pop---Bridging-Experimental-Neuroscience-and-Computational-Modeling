@@ -12,21 +12,12 @@ def main():
     output_file = sys.argv[4]
     use_gpu = sys.argv[5] == "True"
 
-    # Simulate processing progress
-    for i in range(10000 * 1000):
-        if i % 10000 == 0:
-            print(f"Processed {i} rows...")
-
     print(f"Processing {csv_file} with {model} using {num_cpus} CPUs...")
     if use_gpu:
         print("Using GPU")
     else:
         print("Using CPU")
     print(f"Saving results to {output_file}")
-
-    # Print version and path info
-    print(sys.version)
-    print(sys.path)
 
     # Simulate writing output
     with open(output_file, "w") as f:
