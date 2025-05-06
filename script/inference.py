@@ -198,9 +198,17 @@ class SpikeFeatureExtractor:
         if verbose:
             print(f"Loading data from {csv_path}", flush=True)
         
+        # First, read only the header
+        with open(csv_path, 'r') as f:
+            header = f.readline().strip().split(',')
+
+        # Define the columns you want to load
         column_to_load = ['spiking_times']
+        if 'ID' in header:
+            column_to_load.append('ID')
+
         data = pd.read_csv(csv_path, usecols=column_to_load)
-        
+
         if verbose:
             print(f"Data loaded, number of samples: {len(data)}", flush=True)
         
@@ -239,10 +247,16 @@ class SpikeFeatureExtractor:
         """
         # Create an empty results DataFrame
         results = pd.DataFrame(columns=[
-            'spiking_times', 'label', 'f_spiking', 'f_intra_bursting', 'f_inter_bursting', 'duration_bursting', 'nbr_spikes_bursting'
+            'spiking_times', 'label', 'f_spiking', 'f_intra_bursting', 'f_inter_bursting', 'duration_bursting', 'nbr_spikes_bursting', 'ID'
         ], index=data.index)
         
         results["spiking_times"] = data["spiking_times"].copy()
+        if 'ID' in data.columns:
+            results["ID"] = data["ID"].copy()
+        else:
+            results["ID"] = np.arange(len(data))
+            results["ID"] = results["ID"].astype('int32')
+            print("No ID column found, creating a default ID column. We strongly recommend to add an ID column to your data.", flush=True)
 
         if should_preprocess:
             if verbose:
