@@ -13,10 +13,24 @@ import pandas as pd
 import numpy as np
 from multiprocessing import Pool
 import time
+import os
+
+def get_resource_path(relative_path):
+    """ Get the absolute path to a resource in a PyInstaller bundle or script directory. """
+    try:
+        # PyInstaller creates a temporary folder during execution and stores
+        # bundled files there.
+        base_path = sys._MEIPASS
+    except Exception:
+        # When running in normal Python mode (not bundled), use the script directory
+        base_path = os.path.dirname(os.path.abspath(__file__))
+        
+    return os.path.join(base_path, '..', relative_path)
+
 
 def load_model(model_name, device):
     # load the config json file with the path and the config
-    config_path = f"./config.json"
+    config_path = get_resource_path('config.json')
     try:
         with open(config_path, 'r') as f:
             config = json.load(f)
@@ -29,12 +43,14 @@ def load_model(model_name, device):
     if model_name == "STG":
         
         model_path = config['base_model_weights_path']
-        config_path = config['base_model_args_path']
+        config_path_m = config['base_model_args_path']
+        config_path_m = get_resource_path(config_path_m)
+        model_path = get_resource_path(model_path)
         vth = config['base_model_v_th']
 
         # load the config json file with the path and the config
         try:
-            with open(config_path, 'r') as f:
+            with open(config_path_m, 'r') as f:
                 config = json.load(f)
                 if not isinstance(config, dict):
                     raise ValueError("Loaded config is not a dictionary.")
@@ -76,13 +92,16 @@ def load_model(model_name, device):
 
     elif model_name == "DA":     
         model_path = config['da_adapters_weights_path']
+        model_path = get_resource_path(model_path)
         base_model_path = config['base_model_weights_path']
-        config_path = config['da_adapters_args_path']
+        base_model_path = get_resource_path(base_model_path)
+        config_path_m = config['da_adapters_args_path']
+        config_path_m = get_resource_path(config_path_m)
         vth = config['da_adapters_v_th']
 
         # load the config json file with the path and the config
         try:
-            with open(config_path, 'r') as f:
+            with open(config_path_m, 'r') as f:
                 config = json.load(f)
                 if not isinstance(config, dict):
                     raise ValueError("Loaded config is not a dictionary.")
