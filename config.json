@@ -1,9 +1,8 @@
 {
-    "python_env": "/home/julienbrandoit/miniconda3/envs/myenv/bin/python3.11",
+    "python_env": "/home/julienbrandoit/miniconda3/envs/myenv/bin/python",
     "base_model_weights_path": "models/best_model_stg.pth",
     "base_model_args_path": "models/base_model_args.json",
     "base_model_v_th": -51.0,
-
     "da_adapters_weights_path": "models/lora_best.pth",
     "da_adapters_args_path": "models/lora_args.json",
     "da_adapters_v_th": -55.5

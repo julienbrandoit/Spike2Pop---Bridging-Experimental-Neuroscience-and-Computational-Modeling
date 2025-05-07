@@ -167,10 +167,8 @@ class CSVApp:
                 with open(config_path, "r") as f:
                     config_data = json.load(f)
                 self.python_env = config_data.get("python_env", self.python_env)
-                self.base_model_weights_path = config_data.get("base_model_weights_path", self.base_model_weights_path)
-                self.base_model_args_path = config_data.get("base_model_args_path", self.base_model_args_path)
-                self.da_adapters_weights_path = config_data.get("da_adapters_weights_path", self.da_adapters_weights_path)
-                self.da_adapters_args_path = config_data.get("da_adapters_args_path", self.da_adapters_args_path)
+                if self.python_env == "":
+                    self.python_env = sys.executable
 
                 if hasattr(self, "env_label"):
                     self.env_label.config(text=os.path.basename(self.python_env))
@@ -244,10 +242,13 @@ class CSVApp:
     def save_config(self):
         config_data = {
             "python_env": self.python_env,
-            "base_model_weights_path": self.base_model_weights_path,
-            "base_model_args_path": self.base_model_args_path,
-            "da_adapters_weights_path": self.da_adapters_weights_path,
-            "da_adapters_args_path": self.da_adapters_args_path
+            "base_model_weights_path": "models/best_model_stg.pth",
+            "base_model_args_path": "models/base_model_args.json",
+            "base_model_v_th": -51.0,
+
+            "da_adapters_weights_path": "models/lora_best.pth",
+            "da_adapters_args_path": "models/lora_args.json",
+            "da_adapters_v_th": -55.5
         }
         try:
             base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -277,7 +278,7 @@ class CSVApp:
     def execute_script(self):
         python_exe = self.python_env or sys.executable
         base_path = getattr(sys, 'frozen', False) and sys._MEIPASS or os.path.abspath(".")
-        script_path = os.path.join(base_path, "script/main.py")
+        script_path = os.path.join(base_path, "script/main_script.py")
         command = [
             python_exe,
             script_path,
