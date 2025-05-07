@@ -7,6 +7,12 @@ import adapted_model
 from torch.nn.utils.rnn import pad_sequence
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
+import stg
+import da
+import pandas as pd
+import numpy as np
+from multiprocessing import Pool
+import time
 
 def load_model(model_name, device):
     # load the config json file with the path and the config
@@ -24,6 +30,7 @@ def load_model(model_name, device):
         
         model_path = config['base_model_weights_path']
         config_path = config['base_model_args_path']
+        vth = config['base_model_v_th']
 
         # load the config json file with the path and the config
         try:
@@ -65,12 +72,13 @@ def load_model(model_name, device):
         # set the model to evaluation mode
         model.eval()
 
-        return model
+        return model, vth
 
     elif model_name == "DA":     
         model_path = config['da_adapters_weights_path']
         base_model_path = config['base_model_weights_path']
         config_path = config['da_adapters_args_path']
+        vth = config['da_adapters_v_th']
 
         # load the config json file with the path and the config
         try:
@@ -103,473 +111,9 @@ def load_model(model_name, device):
         model = model.to(device)
 
         model.eval()
-        return model
+        return model, vth
     else:
-        raise ValueError(f"Unknown model name: {model_name}")
-    
-
-"""
-@staticmethod
-def collate_fn(batch):
-    # collate the batch
-    spike_times = [torch.tensor(sample[0], dtype=torch.float32) for sample in batch]
-    labels = torch.tensor([sample[1] for sample in batch], dtype=torch.int64)
-    g_s = torch.tensor([sample[2] for sample in batch], dtype=torch.float32)
-    g_u = torch.tensor([sample[3] for sample in batch], dtype=torch.float32)
-    f_spiking = torch.tensor([sample[4] for sample in batch], dtype=torch.float32)
-    f_intra_bursting = torch.tensor([sample[5] for sample in batch], dtype=torch.float32)
-    f_inter_bursting = torch.tensor([sample[6] for sample in batch], dtype=torch.float32)
-    duration_bursting = torch.tensor([sample[7] for sample in batch], dtype=torch.float32)
-    nbr_spikes_bursting = torch.tensor([sample[8] for sample in batch], dtype=torch.float32)
-
-    # pad the spike times
-    spike_times_padded = pad_sequence(spike_times, batch_first=True, padding_value=0)
-    L = torch.tensor([len(sample) for sample in spike_times], dtype=torch.float32)
-
-    return spike_times_padded, L, labels, g_s, g_u, f_spiking, f_intra_bursting, f_inter_bursting, duration_bursting, nbr_spikes_bursting
-
-def main():
-   
-    # INIT WANDB
-    wandb.init(project="DICsNet")
-    config = wandb.config
-
-    # CONFIGURATION from the HYPERPARAMETERS TUNING
-    
-
-    # print the mu and sigma
-    print("mu", model.encoder.embedder.mu)
-    print("sigma", model.encoder.embedder.sigma)
-    # PASS TODO
-
-    # we save the cherry picked value of (g_s, g_u)
-    df = pd.DataFrame(columns=["g_s", "g_u", "g_s_hat", "g_u_hat", "f_spiking", "f_intra_bursting", "f_inter_bursting", "duration_bursting", "nbr_spikes_bursting", "label", "f_spiking_hat", "f_intra_bursting_hat", "f_inter_bursting_hat", "duration_bursting_hat", "nbr_spikes_bursting_hat", "label_hat", "L_dics", "sigma_s", "sigma_u"])
-
-    # for each batch in the test loader,
-    # we pass the batch to the model
-    # and we get the output
-    # we save the initial g_s and g_u and
-    # the output g_s and g_u
-    with torch.no_grad():
-        for i, (x, L, y, g_s, g_u, f_spiking, f_intra_bursting, f_inter_bursting, duration_bursting, nbr_spikes_bursting) in enumerate(test_loader):
-            # move to device
-            x = x.to(device)
-            #L = L.to(device)
-            y = y.to(device)
-            g_s = g_s.to(device)
-            g_u = g_u.to(device)
-            f_spiking = f_spiking.to(device)
-            f_intra_bursting = f_intra_bursting.to(device)
-            f_inter_bursting = f_inter_bursting.to(device)
-            duration_bursting = duration_bursting.to(device)
-            nbr_spikes_bursting = nbr_spikes_bursting.to(device)
-
-            # pass the batch to the model
-            with torch.no_grad():
-                y_hat, y_hat_aux_c, y_hat_aux_m, y_hat_aux_s = model.forward_auxilliary(x, L)
-
-                # get the output g_s and g_u
-                g_s_hat = y_hat[:, 0]
-                g_u_hat = y_hat[:, 1]
-
-                f_spiking_hat = y_hat_aux_m[:, 0]
-                f_intra_bursting_hat = y_hat_aux_m[:, 1]
-                f_inter_bursting_hat = y_hat_aux_m[:, 2]
-                duration_bursting_hat = y_hat_aux_m[:, 3]
-                nbr_spikes_bursting_hat = y_hat_aux_m[:, 4]
-                label_hat = y_hat_aux_c.argmax(dim=1)
-
-                # L_dics is loss_uncertainty
-                L_dics = model.HeteroscedasticHuberLoss(g_s, g_s_hat, y_hat_aux_s[:, 0]) + model.HeteroscedasticHuberLoss(g_u, g_u_hat, y_hat_aux_s[:, 1])
-
-                # get the sigma
-                sigma_s = y_hat_aux_s[:, 0]
-                sigma_u = y_hat_aux_s[:, 1]
-
-                # get the g_s and g_u
-                L_dics = L_dics.cpu().numpy()
-                sigma_s = sigma_s.cpu().numpy()
-                sigma_u = sigma_u.cpu().numpy()
-                g_s = g_s.cpu().numpy()
-                g_u = g_u.cpu().numpy()
-                g_s_hat = g_s_hat.cpu().numpy()
-                g_u_hat = g_u_hat.cpu().numpy()
-                f_spiking = f_spiking.cpu().numpy()
-                f_intra_bursting = f_intra_bursting.cpu().numpy()
-                f_inter_bursting = f_inter_bursting.cpu().numpy()
-                duration_bursting = duration_bursting.cpu().numpy()
-                nbr_spikes_bursting = nbr_spikes_bursting.cpu().numpy()
-                label = y.cpu().numpy()
-                f_spiking_hat = f_spiking_hat.cpu().numpy()
-                f_intra_bursting_hat = f_intra_bursting_hat.cpu().numpy()
-                f_inter_bursting_hat = f_inter_bursting_hat.cpu().numpy()
-                duration_bursting_hat = duration_bursting_hat.cpu().numpy()
-                nbr_spikes_bursting_hat = nbr_spikes_bursting_hat.cpu().numpy()
-                label_hat = label_hat.cpu().numpy()
-                # append to the dataframe
-                df = pd.concat([df, pd.DataFrame({
-                    "g_s": g_s,
-                    "g_u": g_u,
-                    "g_s_hat": g_s_hat,
-                    "g_u_hat": g_u_hat,
-                    "f_spiking": f_spiking,
-                    "f_intra_bursting": f_intra_bursting,
-                    "f_inter_bursting": f_inter_bursting,
-                    "duration_bursting": duration_bursting,
-                    "nbr_spikes_bursting": nbr_spikes_bursting,
-                    "label": label,
-                    "f_spiking_hat": f_spiking_hat,
-                    "f_intra_bursting_hat": f_intra_bursting_hat,
-                    "f_inter_bursting_hat": f_inter_bursting_hat,
-                    "duration_bursting_hat": duration_bursting_hat,
-                    "nbr_spikes_bursting_hat": nbr_spikes_bursting_hat,
-                    "label_hat": label_hat,
-                    "L_dics": L_dics,
-                    "sigma_s": sigma_s,
-                    "sigma_u": sigma_u
-                })], ignore_index=True)
-            # print the progress
-            if i % 10 == 0:
-                print(f"Batch {i}/{len(test_loader)}", flush=True)      
-
-    df.to_csv("./tmp/cherry_picked_g_s_g_u_total.csv", index=False)
-
-    # == 
-
-    # SETUP DEVICE
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print("device", str(device))
-
-    # SETUP DATASET
-    test_set = SpikeTrainDataset(data_path="./tmp/test_set_stg.csv", noise_level=0, should_log=config.should_log, frac=config.fraction_of_data, cherry_pick=True)
-    print("test_set_size", len(test_set))
-
-    # SETUP DATALOADER
-    #num_worker_slurm = int(os.environ.get("SLURM_CPUS_PER_TASK", 16))
-    num_worker_slurm = 16
-    test_loader = DataLoader(test_set, batch_size=config.batch_size, shuffle=True,
-        collate_fn=SpikeTrainDataset.collate_fn, prefetch_factor=4, num_workers=num_worker_slurm, pin_memory=True, persistent_workers=True)    
-    print("test_loader_size", len(test_loader))
-
-    # SETUP MODEL
-    model = DICsNet(
-        d_encoder=config.d_encoder,
-        n_heads=config.n_heads,
-        dropout=config.dropout,
-        n_blocks_encoder=config.n_blocks_encoder,
-        n_blocks_decoder=config.n_blocks_decoder,
-        d_latent=config.d_latent,
-        activation=config.activation,
-        inference_only=config.inference_only,
-        should_log=config.should_log,
-        ).to(device)
-    
-    
-    # Load the model state dict
-    d = torch.load(model_path, map_location=device)
-    d = d['model_state_dict']
-
-    # load the model and print if anything is missing
-    missing_keys, unexpected_keys = model.load_state_dict(d, strict=False)
-    if len(missing_keys) > 0:
-        print(f"Missing keys: {missing_keys}")
-    if len(unexpected_keys) > 0:
-        print(f"Unexpected keys: {unexpected_keys}")
-    # print the model
-    print("Model loaded successfully")
-    print(str(model))
-    model = model.to(device)
-    # set the model to evaluation mode
-    model.eval()
-
-    # print the mu and sigma
-    print("mu", model.encoder.embedder.mu)
-    print("sigma", model.encoder.embedder.sigma)
-    # PASS TODO
-
-    # we save the cherry picked value of (g_s, g_u)
-    df = pd.DataFrame(columns=["g_s", "g_u", "g_s_hat", "g_u_hat", "f_spiking", "f_intra_bursting", "f_inter_bursting", "duration_bursting", "nbr_spikes_bursting", "label", "f_spiking_hat", "f_intra_bursting_hat", "f_inter_bursting_hat", "duration_bursting_hat", "nbr_spikes_bursting_hat", "label_hat", "L_dics", "sigma_s", "sigma_u"])
-
-    # for each batch in the test loader,
-    # we pass the batch to the model
-    # and we get the output
-    # we save the initial g_s and g_u and
-    # the output g_s and g_u
-    with torch.no_grad():
-        for i, (x, L, y, g_s, g_u, f_spiking, f_intra_bursting, f_inter_bursting, duration_bursting, nbr_spikes_bursting) in enumerate(test_loader):
-            # move to device
-            x = x.to(device)
-            #L = L.to(device)
-            y = y.to(device)
-            g_s = g_s.to(device)
-            g_u = g_u.to(device)
-            f_spiking = f_spiking.to(device)
-            f_intra_bursting = f_intra_bursting.to(device)
-            f_inter_bursting = f_inter_bursting.to(device)
-            duration_bursting = duration_bursting.to(device)
-            nbr_spikes_bursting = nbr_spikes_bursting.to(device)
-
-            # pass the batch to the model
-            with torch.no_grad():
-                y_hat, y_hat_aux_c, y_hat_aux_m, y_hat_aux_s = model.forward_auxilliary(x, L)
-
-                # get the output g_s and g_u
-                g_s_hat = y_hat[:, 0]
-                g_u_hat = y_hat[:, 1]
-
-                f_spiking_hat = y_hat_aux_m[:, 0]
-                f_intra_bursting_hat = y_hat_aux_m[:, 1]
-                f_inter_bursting_hat = y_hat_aux_m[:, 2]
-                duration_bursting_hat = y_hat_aux_m[:, 3]
-                nbr_spikes_bursting_hat = y_hat_aux_m[:, 4]
-                label_hat = y_hat_aux_c.argmax(dim=1)
-
-                # L_dics is loss_uncertainty
-                L_dics = model.HeteroscedasticHuberLoss(g_s, g_s_hat, y_hat_aux_s[:, 0]) + model.HeteroscedasticHuberLoss(g_u, g_u_hat, y_hat_aux_s[:, 1])
-
-                # get the sigma
-                sigma_s = y_hat_aux_s[:, 0]
-                sigma_u = y_hat_aux_s[:, 1]
-
-                # get the g_s and g_u
-                L_dics = L_dics.cpu().numpy()
-                sigma_s = sigma_s.cpu().numpy()
-                sigma_u = sigma_u.cpu().numpy()
-                g_s = g_s.cpu().numpy()
-                g_u = g_u.cpu().numpy()
-                g_s_hat = g_s_hat.cpu().numpy()
-                g_u_hat = g_u_hat.cpu().numpy()
-                f_spiking = f_spiking.cpu().numpy()
-                f_intra_bursting = f_intra_bursting.cpu().numpy()
-                f_inter_bursting = f_inter_bursting.cpu().numpy()
-                duration_bursting = duration_bursting.cpu().numpy()
-                nbr_spikes_bursting = nbr_spikes_bursting.cpu().numpy()
-                label = y.cpu().numpy()
-                f_spiking_hat = f_spiking_hat.cpu().numpy()
-                f_intra_bursting_hat = f_intra_bursting_hat.cpu().numpy()
-                f_inter_bursting_hat = f_inter_bursting_hat.cpu().numpy()
-                duration_bursting_hat = duration_bursting_hat.cpu().numpy()
-                nbr_spikes_bursting_hat = nbr_spikes_bursting_hat.cpu().numpy()
-                label_hat = label_hat.cpu().numpy()
-                # append to the dataframe
-                df = pd.concat([df, pd.DataFrame({
-                    "g_s": g_s,
-                    "g_u": g_u,
-                    "g_s_hat": g_s_hat,
-                    "g_u_hat": g_u_hat,
-                    "f_spiking": f_spiking,
-                    "f_intra_bursting": f_intra_bursting,
-                    "f_inter_bursting": f_inter_bursting,
-                    "duration_bursting": duration_bursting,
-                    "nbr_spikes_bursting": nbr_spikes_bursting,
-                    "label": label,
-                    "f_spiking_hat": f_spiking_hat,
-                    "f_intra_bursting_hat": f_intra_bursting_hat,
-                    "f_inter_bursting_hat": f_inter_bursting_hat,
-                    "duration_bursting_hat": duration_bursting_hat,
-                    "nbr_spikes_bursting_hat": nbr_spikes_bursting_hat,
-                    "label_hat": label_hat,
-                    "L_dics": L_dics,
-                    "sigma_s": sigma_s,
-                    "sigma_u": sigma_u
-                })], ignore_index=True)
-            # print the progress
-            if i % 10 == 0:
-                print(f"Batch {i}/{len(test_loader)}", flush=True)      
-
-    df.to_csv("./tmp/cherry_picked_g_s_g_u.csv", index=False)
-
-
-
-    if True:
-        # impact of the noise level on the metrics
-        noise_levels = np.linspace(0, 5, 11)
-        for nl in noise_levels:
-            test_set.nl = nl
-            test_loader = DataLoader(test_set, batch_size=config.batch_size, shuffle=True,
-                collate_fn=SpikeTrainDataset.collate_fn, prefetch_factor=4, num_workers=num_worker_slurm, pin_memory=True, persistent_workers=True)
-            # for each batch in the test loader,
-            # we pass the batch to the model
-            # and we get the output
-            # we save the initial g_s and g_u and
-            # the output g_s and g_u
-            with torch.no_grad():
-                for i, (x, L, y, g_s, g_u, f_spiking, f_intra_bursting, f_inter_bursting, duration_bursting, nbr_spikes_bursting) in enumerate(test_loader):
-                    # move to device
-                    x = x.to(device)
-                    #L = L.to(device)
-                    y = y.to(device)
-                    g_s = g_s.to(device)
-                    g_u = g_u.to(device)
-                    f_spiking = f_spiking.to(device)
-                    f_intra_bursting = f_intra_bursting.to(device)
-                    f_inter_bursting = f_inter_bursting.to(device)
-                    duration_bursting = duration_bursting.to(device)
-                    nbr_spikes_bursting = nbr_spikes_bursting.to(device)
-
-                    # pass the batch to the model
-                    with torch.no_grad():
-                        y_hat, y_hat_aux_c, y_hat_aux_m, y_hat_aux_s = model.forward_auxilliary(x, L)
-
-                        # get the output g_s and g_u
-                        g_s_hat = y_hat[:, 0]
-                        g_u_hat = y_hat[:, 1]
-
-                        f_spiking_hat = y_hat_aux_m[:, 0]
-                        f_intra_bursting_hat = y_hat_aux_m[:, 1]
-                        f_inter_bursting_hat = y_hat_aux_m[:, 2]
-                        duration_bursting_hat = y_hat_aux_m[:, 3]
-                        nbr_spikes_bursting_hat = y_hat_aux_m[:, 4]
-                        label_hat = y_hat_aux_c.argmax(dim=1)
-
-                        # get the sigma
-                        sigma_s = y_hat_aux_s[:, 0]
-                        sigma_u = y_hat_aux_s[:, 1]
-
-                        # get the g_s and g_u
-                        L_dics = model.HeteroscedasticHuberLoss(g_s, g_s_hat, y_hat_aux_s[:, 0]) + model.HeteroscedasticHuberLoss(g_u, g_u_hat, y_hat_aux_s[:, 1])
-
-                        # get the metrics
-                        L_dics = L_dics.cpu().numpy()
-                        sigma_s = sigma_s.cpu().numpy()
-                        sigma_u = sigma_u.cpu().numpy()
-                        g_s = g_s.cpu().numpy()
-                        g_u = g_u.cpu().numpy()
-                        g_s_hat = g_s_hat.cpu().numpy()
-                        g_u_hat = g_u_hat.cpu().numpy()
-                        f_spiking = f_spiking.cpu().numpy()
-                        f_intra_bursting = f_intra_bursting.cpu().numpy()
-                        f_inter_bursting = f_inter_bursting.cpu().numpy()
-                        duration_bursting = duration_bursting.cpu().numpy()
-                        nbr_spikes_bursting = nbr_spikes_bursting.cpu().numpy()
-                        label = y.cpu().numpy()
-                        f_spiking_hat = f_spiking_hat.cpu().numpy()
-                        f_intra_bursting_hat = f_intra_bursting_hat.cpu().numpy()
-                        f_inter_bursting_hat = f_inter_bursting_hat.cpu().numpy()
-                        duration_bursting_hat = duration_bursting_hat.cpu().numpy()
-                        nbr_spikes_bursting_hat = nbr_spikes_bursting_hat.cpu().numpy()
-                        label_hat = label_hat.cpu().numpy()
-                        # append to the dataframe
-                        df = pd.concat([df, pd.DataFrame({
-                            "g_s": g_s,
-                            "g_u": g_u,
-                            "g_s_hat": g_s_hat,
-                            "g_u_hat": g_u_hat,
-                            "f_spiking": f_spiking,
-                            "f_intra_bursting": f_intra_bursting,
-                            "f_inter_bursting": f_inter_bursting,
-                            "duration_bursting": duration_bursting,
-                            "nbr_spikes_bursting": nbr_spikes_bursting,
-                            "label": label,
-                            "f_spiking_hat": f_spiking_hat,
-                            "f_intra_bursting_hat": f_intra_bursting_hat,
-                            "f_inter_bursting_hat": f_inter_bursting_hat,
-                            "duration_bursting_hat": duration_bursting_hat,
-                            "nbr_spikes_bursting_hat": nbr_spikes_bursting_hat,
-                            "label_hat": label_hat,
-                            "L_dics": L_dics,
-                            "sigma_s": sigma_s,
-                            "sigma_u": sigma_u
-                        })], ignore_index=True)
-                    # print the progress
-                    if i % 10 == 0:
-                        print(f"Batch {i}/{len(test_loader)}, noise level {nl}", flush=True)
-            # save the dataframe
-            df.to_csv(f"./tmp/cherry_picked_g_s_g_u_nl_{nl}.csv", index=False)
-
-    # == WE BUILD THE PREDICTION DATASET == 
-    # we separate in cherry picked and not cherry picked;
-    # We associate a common ID based on the g_s and g_u values
-    # we forward the cherry picked dataset through the model and save the g_s_hat and g_u_hat
-    # we save in separate files the cherry picked (and the predictions and the ID) and the not cherry picked (and the ID)
-
-    # we read the csv again, forward through the SpikeFeatureExtractor ; remove the silent ones ; cherry pick the data and and save in two csv files
-    sfe = SpikeFeatureExtractor(model="stg")
-    data_csv = pd.read_csv("./tmp/test_set_stg.csv", usecols=["g_s", "g_u", "spiking_times"]).sample(frac=1.0, random_state=42)
-    data = sfe.extract_from_dataframe(data_csv, num_workers=16, verbose=True)
-    data["g_s"] = data_csv["g_s"].values
-    data["g_u"] = data_csv["g_u"].values
-    data = data.dropna()
-    data = data[data["label"] != 0]
-
-    # add the ID but shouuld use float precision of torch before converting to string
-    data["ID"] = torch.tensor(data["g_s"].values).float().cpu().numpy().astype(str) + "_" + torch.tensor(data["g_u"].values).float().cpu().numpy().astype(str)
-
-    cherry_picked = data.groupby(["g_s", "g_u"], group_keys=False).sample(n=1, random_state=42)
-    not_cherry_picked = data.drop(cherry_picked.index)
-
-    # spiking time should be saved as a list comma separated string and with '[' and ']'
-    cherry_picked["spiking_times"] = cherry_picked["spiking_times"].apply(lambda x: "[" + ",".join(map(str, x)) + "]")
-    not_cherry_picked["spiking_times"] = not_cherry_picked["spiking_times"].apply(lambda x: "[" + ",".join(map(str, x)) + "]")
-
-    # save the data
-    cherry_picked.to_csv("./tmp/cherry_picked.csv", index=False)
-    not_cherry_picked.to_csv("./tmp/not_cherry_picked.csv", index=False)
-
-    # forward the cherry picked dataset through the model and save the g_s_hat and g_u_hat
-    cherry_picked_set = SpikeTrainDataset(data_path="./tmp/cherry_picked.csv", noise_level=0, should_log=config.should_log, frac=config.fraction_of_data, cherry_pick=False)
-    cherry_picked_loader = DataLoader(cherry_picked_set, batch_size=config.batch_size, shuffle=True,
-        collate_fn=SpikeTrainDataset.collate_fn, prefetch_factor=4, num_workers=num_worker_slurm, pin_memory=True, persistent_workers=True)
-    print("cherry_picked_loader_size", len(cherry_picked_loader))
-    # for each batch in the cherry picked loader,
-    # we pass the batch to the model
-    # and we get the output
-    # we save the initial g_s and g_u and
-    # the output g_s and g_u along with the ID
-    df_cherry_picked = pd.DataFrame(columns=["g_s", "g_u", "g_s_hat", "g_u_hat", "ID"])
-    with torch.no_grad():
-        for i, (x, L, y, g_s, g_u, f_spiking, f_intra_bursting, f_inter_bursting, duration_bursting, nbr_spikes_bursting) in enumerate(cherry_picked_loader):
-            # move to device
-            x = x.to(device)
-            #L = L.to(device)
-            y = y.to(device)
-            g_s = g_s.to(device)
-            g_u = g_u.to(device)
-            f_spiking = f_spiking.to(device)
-            f_intra_bursting = f_intra_bursting.to(device)
-            f_inter_bursting = f_inter_bursting.to(device)
-            duration_bursting = duration_bursting.to(device)
-            nbr_spikes_bursting = nbr_spikes_bursting.to(device)
-
-            # pass the batch to the model
-            with torch.no_grad():
-                y_hat, y_hat_aux_c, y_hat_aux_m, y_hat_aux_s = model.forward_auxilliary(x, L)
-
-                # get the output g_s and g_u
-                g_s_hat = y_hat[:, 0]
-                g_u_hat = y_hat[:, 1]
-
-                # build back the ID
-                ID = g_s.cpu().numpy().astype(str) + "_" + g_u.cpu().numpy().astype(str)
-
-                g_s_hat = g_s_hat.cpu().numpy()
-                g_u_hat = g_u_hat.cpu().numpy()
-                g_s = g_s.cpu().numpy()
-                g_u = g_u.cpu().numpy()
-                
-                # append to the dataframe
-                df_cherry_picked = pd.concat([df_cherry_picked, pd.DataFrame({
-                    "g_s": g_s,
-                    "g_u": g_u,
-                    "g_s_hat": g_s_hat,
-                    "g_u_hat": g_u_hat,
-                    "ID": ID
-                })], ignore_index=True)
-            # print the progress
-            if i % 10 == 0:
-                print(f"Batch {i}/{len(cherry_picked_loader)}", flush=True)
-    # save the dataframe
-    df_cherry_picked.to_csv("./tmp/cherry_picked_predictions.csv", index=False)
-
-if __name__ == "__main__":
-    main()
-    wandb.finish()
-
-
-
-        if len(spike_times) > 250:
-            spike_times = spike_times[:250]
-"""
+        raise ValueError(f"Unknown neuron name: {model_name}")
 
 def forward_model(model, data, device, batch_size=512):
     # we loop over the data, build the tensor, put on device and forward
@@ -584,7 +128,11 @@ def forward_model(model, data, device, batch_size=512):
             batch = data.iloc[start_idx:end_idx]
             spike_times = batch['spiking_times'].values
             L = batch['L'].values
-            spike_times = [torch.tensor(x, dtype=torch.float32) for x in spike_times]
+
+            # Limit the spike_times to a maximum length of 250 (not mandatory but for the stg and the da it is highly sufficient)
+            spike_times = [torch.tensor(x[:250], dtype=torch.float32) if len(x) > 250 else torch.tensor(x, dtype=torch.float32) for x in spike_times]
+            L = [len(x) if len(x) < 250 else 250 for x in spike_times]
+
             spike_times = pad_sequence(spike_times, batch_first=True, padding_value=0)
             spike_times = spike_times.to(device)
             L = torch.tensor(L, dtype=torch.float32).cpu()
@@ -599,19 +147,71 @@ def forward_model(model, data, device, batch_size=512):
 
     return data
 
+def process_row_stg(row):
+        population_size, vth, row = row
+        ID = row['ID']
+        g_s_hat = row['g_s_hat']
+        g_u_hat = row['g_u_hat']
+        population = stg.generate_neuromodulated_population(population_size, vth, g_s_hat, g_u_hat, iterations=5)
+        population = np.hstack((np.full((len(population), 1), ID), population))
+        return population
+
+def process_row_da(row):
+    population_size, vth, row = row
+    ID = row['ID']
+    g_s_hat = row['g_s_hat']
+    g_u_hat = row['g_u_hat']
+    population = da.generate_neuromodulated_population(population_size, vth, g_s_hat, g_u_hat)
+    population = np.hstack((np.full((len(population), 1), ID), population))
+    return population
+
+def forward_dics(data, neuron_type, num_cpus, population_size, vth):
+    def with_progress(index, total):
+        if index % 25 == 0 or index == total - 1:
+            print(f"[{time.strftime('%H:%M:%S')}] Processed {index + 1}/{total} inputs", flush=True)
+
+    if neuron_type == "STG":
+        column_names = ['ID', 'g_Na', 'g_Kd', 'g_CaT', 'g_CaS', 'g_KCa', 'g_A', 'g_H', 'g_leak']
+        processor = process_row_stg
+    elif neuron_type == "DA":
+        column_names = ['ID', 'g_Na', 'g_Kd', 'g_CaL', 'g_CaN', 'g_ERG', 'g_NMDA', 'g_leak']
+        processor = process_row_da
+    else:
+        raise ValueError(f"Unknown neuron type: {neuron_type}")
+
+    args = [(population_size, vth, row) for _, row in data.iterrows()]
+    total = len(args)
+
+    results = []
+    with Pool(num_cpus) as pool:
+        for i, result in enumerate(pool.imap(processor, args)):
+            results.append(result)
+            with_progress(i, total)
+
+    # Efficient one-time concat
+    df = pd.concat(
+        [pd.DataFrame(pop, columns=column_names) for pop in results],
+        ignore_index=True
+    )
+
+    dtype_map = {col: 'float32' for col in column_names if col != 'ID'}
+    df = df.astype(dtype_map)
+
+    return df
+
 def main():
     if len(sys.argv) != 7:
-        print("Usage: script.py <csv_file> <model> <num_cpus> <output_file> <use_gpu> <population_size>")
+        print("Usage: script.py <csv_file> <neuron_type> <num_cpus> <output_file> <use_gpu> <population_size>")
         sys.exit(1)
 
     csv_file = sys.argv[1]
-    model = sys.argv[2]
+    neuron_type = sys.argv[2]
     num_cpus = int(sys.argv[3])
     output_file = sys.argv[4]
     use_gpu = sys.argv[5] == "True"
     population_size = int(sys.argv[6])  # New argument
 
-    print(f"Processing {csv_file} with {model} using {num_cpus} CPUs and generating population of size {population_size}.")
+    print(f"Processing {csv_file} with {neuron_type} using {num_cpus} CPUs and generating population of size {population_size}.")
     if use_gpu:
         if torch.cuda.is_available():
             device = torch.device("cuda")
@@ -624,7 +224,7 @@ def main():
         print("Using CPU")
    
     print("Loading model...")
-    model = load_model(model, device)
+    model, vth = load_model(neuron_type, device)
     print("Model loaded successfully.")
 
     sys.stdout.flush()
@@ -643,11 +243,13 @@ def main():
 
 
     print("Generating population...")
-    r_data_r = forward_model(model, r_data, device)
+    r_data_dics = forward_model(model, r_data, device)
+    r_data_gbar = forward_dics(r_data_dics, neuron_type, num_cpus, population_size, vth)
     print("Population generation completed.")
 
-    r_data_r.to_csv(output_file, index=False)
+    r_data_gbar.to_csv(output_file, index=False)
     print(f"Results ready to be saved !")
+    print("RESULTS_READY")
     
 if __name__ == "__main__":
     main()

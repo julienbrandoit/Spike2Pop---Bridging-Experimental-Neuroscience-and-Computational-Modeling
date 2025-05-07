@@ -35,7 +35,7 @@ class CSVApp:
 
         self.selected_model = tk.StringVar(value="")
         self.num_cpus = multiprocessing.cpu_count()
-        self.selected_cpus = tk.IntVar(value=self.num_cpus // 2)
+        self.selected_cpus = tk.IntVar(value=self.num_cpus)
         self.population_size = tk.IntVar(value=16)  # New variable
 
         self.python_env = sys.executable
