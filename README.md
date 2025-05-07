@@ -47,7 +47,7 @@ To get started with Spike2Pop, follow these steps:
 
 #### Option 2: Using the Standalone Executable
 
-1. **Download the Executable**: Download the entire `application` folder for your operating system from the [releases page](https://github.com/julienbrandoit/Spike2Pop/releases).
+1. **Download the Executable**: Download the entire `zip` folder from the [releases page](https://github.com/julienbrandoit/Spike2Pop/releases).
 
 2. **Run the Executable**:
    - Currently, the standalone executable is available only for Linux. Open a terminal, navigate to the `application` directory, and run:
