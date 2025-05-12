@@ -30,6 +30,10 @@ Spike2Pop is an open-source application designed to bridge this gap by providing
 3. **Simulation**: Simulate the generated populations and visualize the results.
 4. **Output**: Obtain and save a CSV file containing all the generated populations associated with the original ID.
 
+
+The main interface of the application is designed to be intuitive and user-friendly, allowing users to easily navigate through the different functionalities. Below is a screenshot of the main interface:
+![Main Interface](images/main_panel.png)
+
 ### Getting Started
 
 To get started with Spike2Pop, follow these steps:
@@ -74,9 +78,13 @@ Once you have generated the population, you can proceed to the simulation panel:
 4. **Simulate**: Click 'SIMULATE!' to start the simulation.
 5. **View Results**: After the simulation is complete, you can view the results by clicking 'See Results' for each ID. The trace values are stored along the conductance values for the simulated instances.
 
+Below is a screenshot of the simulation panel:
+![Simulation Panel](images/simu_panel.png)
+
 ### Visualization
 
-The visualization feature allows you to view the simulation results in a graphical format. You can see the original spiking times and the simulated voltage traces for each instance.
+The visualization feature allows you to view the simulation results in a graphical format. Once the simulations are complete, you can view the results by clicking on the 'See Results' button for each ID. This will open a new window displaying the simulated voltage traces, the original spiking times and the conductance values and distribution for the selected ID.
+![Simulation Results](images/simu_results.png)
 
 ## About the Project
 
