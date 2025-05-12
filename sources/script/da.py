@@ -1,7 +1,6 @@
 
 import numpy as np
-from utils import gsigmoid, d_gsigmoid, get_w_factors, get_w_factors_constant_tau
-from utils import find_first_decreasing_zero_bisection
+from utils import gsigmoid, d_gsigmoid, get_w_factors
 from scipy.integrate import solve_ivp
 from utils import gamma_uniform_mean_std_matching
 
@@ -260,26 +259,6 @@ def d_o_inf_ERG(V):
 
 # == utils == #
 
-def find_V_th_DICs(V, g_Na, g_Kd, g_CaL, g_CaN, g_ERG, g_NMDA, g_leak,
-                    E_Na, E_K, E_Ca, E_leak, E_NMDA, Mg,
-                    tau_f_da=tau_m_Na, tau_s_da=tau_m_CaN, tau_u_da=tau_ERG_constant_function, get_I_static=False, normalize=True, y_tol=1e-6, x_tol=1e-6, max_iter=1000, verbose=True):
-    """
-    TODO : Add docstring
-    """
-
-    g_t = lambda V_scalar: DICs(np.asarray([V_scalar]), g_Na, g_Kd, g_CaL, g_CaN, g_ERG, g_NMDA, g_leak, 
-                                E_Na, E_K, E_Ca, E_leak, E_NMDA, Mg, tau_f_da, tau_s_da, tau_u_da, False, normalize)[3]
-
-    V_th = find_first_decreasing_zero_bisection(V, g_t, y_tol=y_tol, x_tol=x_tol, max_iter=max_iter, verbose=verbose)
-    V_th = np.asarray([V_th], dtype=np.float64)
-
-    if V_th is None or np.isnan(V_th):
-        return V_th, (np.atleast_1d(np.nan), np.atleast_1d(np.nan), np.atleast_1d(np.nan), np.atleast_1d(np.nan))
-
-    values = DICs(V_th, g_Na, g_Kd, g_CaL, g_CaN, g_ERG, g_NMDA, g_leak, 
-                    E_Na, E_K, E_Ca, E_leak, E_NMDA, Mg, tau_f_da, tau_s_da, tau_u_da, get_I_static, normalize)
-
-    return V_th, values
 # == ODEs == #
 
 def ODEs(t, u, g_Na, g_Kd, g_CaL, g_CaN, g_ERG, g_NMDA, g_leak, E_Na, E_K, E_Ca, E_leak, E_NMDA, Mg):

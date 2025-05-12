@@ -1,6 +1,5 @@
 import numpy as np
-from tqdm import tqdm
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 def gsigmoid(V, A, B, C, D):
     """
@@ -151,7 +150,8 @@ def simulate_population_multiprocessing(simulation_function, population, u0, T_f
     return simulate_population_t_eval_multiprocessing(simulation_function, population, u0, np.arange(0, T_final, dt), params, max_workers, verbose)
 
 
-def simulate_population_t_eval_multiprocessing(simulation_function, population, u0, t_eval, params, max_workers=8, verbose=False):
+
+def simulate_population_t_eval_multiprocessing(simulation_function, population, u0, t_eval, params, max_workers=8, verbose=False, use_tqdm=True):
     """
     Simulate a population using multiprocessing over specified evaluation times.
 
@@ -170,31 +170,45 @@ def simulate_population_t_eval_multiprocessing(simulation_function, population, 
     max_workers : int, optional
         The maximum number of worker processes for multiprocessing. Defaults to 8.
     verbose : bool, optional
-        If True, display progress using `tqdm`. Defaults to False.
+        If True, display progress. Defaults to False.
+    use_tqdm : bool, optional
+        If True and verbose is True, use tqdm for progress bar. Otherwise, use print.
 
     Returns
     -------
     list
         A list of simulation results, one for each individual in the population.
-
-    Notes
-    -----
-    This function uses `ProcessPoolExecutor` to parallelize the simulations for
-    the population. Each individual in the population is simulated independently.
     """
     traces = []
-    with ProcessPoolExecutor(max_workers=max_workers) as executor:
-        tasks = [(u0, individual, t_eval, params) for individual in population]
-        results = list(
-            tqdm(
-                executor.map(simulation_function, tasks),
-                total=len(population),
-                desc='Simulating population (multiprocessing)',
-                disable=not verbose  # Disable tqdm if verbose is False
-            )
-        )
-    for result in results:
-        traces.append(result)
+    total = len(population)
+    tasks = [(u0, individual, t_eval, params) for individual in population]
+
+    if verbose and use_tqdm:
+        # Use tqdm progress bar
+        raise ValueError("tqdm has been removed from the code.")
+    else:
+        # Use print-based progress reporting
+        results = [None] * total
+        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+            future_to_idx = {
+                executor.submit(simulation_function, task): i
+                for i, task in enumerate(tasks)
+            }
+
+            completed = 0
+            next_print = 10  # percentage to print at
+            for future in as_completed(future_to_idx):
+                idx = future_to_idx[future]
+                results[idx] = future.result()
+                completed += 1
+
+                if verbose:
+                    progress = (completed / total) * 100
+                    if progress >= next_print:
+                        print(f"PROGRESS: {completed}/{total}: {progress:.1f}%", flush=True)
+                        next_print += 10
+
+    traces.extend(results)
     return traces
 
 
@@ -261,7 +275,10 @@ def simulate_population_t_eval(simulation, population, u0, t_eval, params, verbo
     function for each individual sequentially.
     """
     traces = []
-    for i in tqdm(range(len(population)), desc='Simulating population', disable=not verbose):
+    for i in range(len(population)):
+        if verbose:
+            print(f"Simulating individual {i + 1}/{len(population)}", flush=True)
+        
         individual = population[i]
         trace = simulation([u0, individual, t_eval, params])
         traces.append(trace)
@@ -401,244 +418,6 @@ def get_w_factors_constant_tau(V, tau_x, tau_f, tau_s, tau_u):
     """
     return w_factor_constant_tau(V, tau_x, tau_f, tau_s), w_factor_constant_tau(V, tau_x, tau_s, tau_u)
 
-# == Analytical and numerical utils functions ==
-
-def bisection(f, a, b, y_tol=1e-6, x_tol=1e-6, max_iter=1000, verbose=False):
-    """
-    Finds the root of a continuous function using the bisection method.
-
-    Parameters
-    ----------
-    f : callable
-        The function for which to find the root. It must be continuous on the interval [a, b].
-    a : float
-        The lower bound of the interval.
-    b : float
-        The upper bound of the interval.
-    y_tol : float, optional
-        The tolerance for the absolute value of the function at the root. Defaults to 1e-6.
-    x_tol : float, optional
-        The tolerance for the interval width. Defaults to 1e-6.
-    max_iter : int, optional
-        The maximum number of iterations. Defaults to 1000.
-    verbose : bool, optional
-        If True, prints a message if the method fails to converge. Defaults to False.
-
-    Returns
-    -------
-    float
-        The approximate root of the function within the specified tolerances.
-
-    Raises
-    ------
-    ValueError
-        If f(a) and f(b) do not have different signs, which violates the assumption of the method.
-
-    Notes
-    -----
-    - The bisection method assumes that the function `f` is continuous on the interval [a, b].
-    - The function values at the endpoints, f(a) and f(b), must have opposite signs (f(a) * f(b) < 0).
-    - The method iteratively bisects the interval [a, b] and narrows down the interval until it finds
-      a root or satisfies one of the stopping criteria:
-        1. |f(c)| <= y_tol (function value tolerance).
-        2. (b - a) / 2 < x_tol (interval width tolerance).
-    - If the method does not converge within the maximum number of iterations, it returns the last midpoint.
-
-    Examples
-    --------
-    >>> def f(x):
-    ...     return x**3 - x - 2
-    >>> root = bisection(f, 1, 2)
-    >>> print(root)
-    1.5213797092437744
-    """
-
-    f_a = f(a)
-    f_b = f(b)
-
-    if abs(f_a) <= y_tol:
-        return a
-    if abs(f_b) <= y_tol:
-        return b
-
-    if f(a) * f(b) > 0:
-        raise ValueError("f(a) and f(b) must have different signs")
-    
-    for _ in range(max_iter):
-        c = (a + b) / 2
-        if abs(f(c)) <= y_tol or (b - a) / 2 < x_tol:
-            return c
-        if f(c) * f(a) < 0:
-            b = c
-        else:
-            a = c
-
-    if verbose:
-        print("Bisection method did not converge after {} iterations".format(max_iter))
-
-    return c
-
-def find_first_decreasing_zero(x, y, get_index=False):
-    """
-    Find the first index where the values in `y` transition from non-negative to negative.
-
-    Parameters
-    ----------
-    x : array-like
-        The corresponding x-values for the y-values.
-    y : array-like
-        The array of y-values to evaluate.
-    get_index : bool, optional
-        If True, returns both the index and the corresponding x-value. Defaults to False.
-
-    Returns
-    -------
-    float or tuple
-        - If `get_index` is False, returns the x-value where the transition occurs.
-        - If `get_index` is True, returns a tuple `(index, x_value)` for the transition point.
-        - Returns `None` if no such transition is found.
-
-    Notes
-    -----
-    A transition is identified when a value in `y` is non-negative (y[i] >= 0) and the
-    subsequent value is negative (y[i+1] < 0).
-    """
-    for i in range(len(y)-1):
-        if y[i] >= 0 and y[i+1] < 0:
-            if get_index:
-                return i, x[i]
-            else:
-                return x[i]
-
-    if get_index:
-        return None, None        
-    return None
-
-
-def find_first_decreasing_zero_bisection(x_init, f, y_tol=1e-6, x_tol=1e-6, max_iter=1000, verbose=False):
-    """
-    Find the first zero of a decreasing function using the bisection method.
-
-    Parameters
-    ----------
-    x_init : array-like
-        The initial x-values used to evaluate the function.
-    f : callable
-        The function for which to find the zero.
-    y_tol : float, optional
-        The tolerance for the absolute value of the function at the root. Defaults to 1e-6.
-    x_tol : float, optional
-        The tolerance for the interval width. Defaults to 1e-6.
-    max_iter : int, optional
-        The maximum number of iterations for the bisection method. Defaults to 1000.
-    verbose : bool, optional
-        If True, prints a message if the bisection method fails to converge. Defaults to False.
-
-    Returns
-    -------
-    float
-        The x-value of the first zero where the function transitions from positive to negative.
-        Returns NaN if no such transition is found.
-
-    Notes
-    -----
-    The function `f` must be continuous and should transition from positive to negative for the
-    bisection method to succeed.
-    """
-    x = x_init
-    y = f(x)
-
-    for i in range(len(y)-1):
-        if y[i] > 0 and y[i+1] < 0:
-            return bisection(f, x[i], x[i+1], y_tol, x_tol, max_iter, verbose)
-                
-    return np.nan
-
-
-def find_first_increasing_zero_bisection(x_init, f, y_tol=1e-6, x_tol=1e-6, max_iter=1000, verbose=False):
-    """
-    Find the first zero of an increasing function using the bisection method.
-
-    Parameters
-    ----------
-    x_init : array-like
-        The initial x-values used to evaluate the function.
-    f : callable
-        The function for which to find the zero.
-    y_tol : float, optional
-        The tolerance for the absolute value of the function at the root. Defaults to 1e-6.
-    x_tol : float, optional
-        The tolerance for the interval width. Defaults to 1e-6.
-    max_iter : int, optional
-        The maximum number of iterations for the bisection method. Defaults to 1000.
-    verbose : bool, optional
-        If True, prints a message if the bisection method fails to converge. Defaults to False.
-
-    Returns
-    -------
-    float
-        The x-value of the first zero where the function transitions from negative to positive.
-        Returns NaN if no such transition is found.
-
-    Notes
-    -----
-    The function `f` must be continuous and should transition from negative to positive for the
-    bisection method to succeed.
-    """
-    minus_f = lambda x: -f(x)
-    return -find_first_decreasing_zero_bisection(x_init, minus_f, y_tol, x_tol, max_iter, verbose)
-
-
-def find_first_decreasing_and_first_increasing_zero_bisection(x_init, f, y_tol=1e-6, x_tol=1e-6, max_iter=1000, verbose=False):
-    """
-    Find the first zeros where a function transitions from positive to negative (decreasing zero)
-    and from negative to positive (increasing zero) using the bisection method.
-
-    Parameters
-    ----------
-    x_init : array-like
-        The initial x-values used to evaluate the function.
-    f : callable
-        The function for which to find the zeros.
-    y_tol : float, optional
-        The tolerance for the absolute value of the function at the root. Defaults to 1e-6.
-    x_tol : float, optional
-        The tolerance for the interval width. Defaults to 1e-6.
-    max_iter : int, optional
-        The maximum number of iterations for the bisection method. Defaults to 1000.
-    verbose : bool, optional
-        If True, prints a message if the bisection method fails to converge. Defaults to False.
-
-    Returns
-    -------
-    tuple of floats
-        A tuple `(first_decreasing_zero, first_increasing_zero)`:
-        - `first_decreasing_zero`: The x-value of the first zero where the function transitions
-          from positive to negative.
-        - `first_increasing_zero`: The x-value of the first zero where the function transitions
-          from negative to positive.
-        - Both values are NaN if no corresponding transitions are found.
-
-    Notes
-    -----
-    This function uses the bisection method for finding the zeros, assuming the function `f` is
-    continuous and transitions between positive and negative values in the provided range.
-    """
-    x = x_init
-    y = f(x)
-
-    first_decreasing_zero = np.nan
-    first_increasing_zero = np.nan
-
-    for i in range(len(y)-1):
-        if y[i] > 0 and y[i+1] < 0 and np.isnan(first_decreasing_zero):
-            first_decreasing_zero = bisection(f, x[i], x[i+1], y_tol, x_tol, max_iter, verbose)
-        if y[i] < 0 and y[i+1] > 0 and np.isnan(first_increasing_zero):
-            first_increasing_zero = bisection(f, x[i], x[i+1], y_tol, x_tol, max_iter, verbose)
-                
-    return first_decreasing_zero, first_increasing_zero
-
-
 def get_spiking_times(t, V, spike_high_threshold=10, spike_low_threshold=0):
     """
     Extract the spiking times from a voltage trace based on threshold crossings.
@@ -682,65 +461,3 @@ def get_spiking_times(t, V, spike_high_threshold=10, spike_low_threshold=0):
     spike_times = t[valid_starts]
     
     return valid_starts, spike_times
-
-
-# == Sampling utils functions ==
-
-def latin_hyper_cube_sampling(n_samples, n_dim, ranges=None):
-    """
-    Perform Latin Hypercube Sampling (LHS) to generate a set of samples for a given number of dimensions.
-
-    Parameters
-    ----------
-    n_samples : int
-        The number of samples to generate.
-    n_dim : int
-        The number of dimensions for the samples.
-    ranges : array-like of shape (n_dim, 2), optional
-        The range for each dimension, specified as [[min1, max1], [min2, max2], ...].
-        If `None`, the range for all dimensions is assumed to be [0, 1]. Defaults to None.
-
-    Returns
-    -------
-    np.ndarray
-        A 2D array of shape (n_samples, n_dim) containing the generated samples.
-
-    Notes
-    -----
-    - Latin Hypercube Sampling divides the sampling space into equal intervals and ensures that each
-      interval in every dimension is sampled exactly once.
-    - The function optionally scales the samples to the specified ranges for each dimension.
-    - Samples are shuffled within each dimension to ensure randomness.
-
-    Examples
-    --------
-    To generate 5 samples in 2 dimensions within default ranges [0, 1]:
-
-    >>> samples = latin_hyper_cube_sampling(5, 2)
-
-    To generate 10 samples in 3 dimensions with custom ranges:
-
-    >>> ranges = [[0, 10], [20, 30], [100, 200]]
-    >>> samples = latin_hyper_cube_sampling(10, 3, ranges)
-    """
-
-    if ranges is None:
-        ranges = np.array([[0, 1] for i in range(n_dim)])
-
-    # generate the intervals
-    intervals = np.linspace(0, 1, n_samples + 1)
-    
-    # generate the samples
-    samples = np.zeros((n_samples, n_dim))
-    for i in range(n_dim):
-        samples[:, i] = np.random.uniform(intervals[:-1], intervals[1:], n_samples)
-        
-    # shuffle the samples
-    for i in range(n_dim):
-        np.random.shuffle(samples[:, i])
-
-    # scale the samples
-    for i in range(n_dim):
-        samples[:, i] = samples[:, i] * (ranges[i][1] - ranges[i][0]) + ranges[i][0]
-
-    return samples

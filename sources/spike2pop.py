@@ -10,6 +10,10 @@ import atexit
 import sys
 import json
 import webbrowser
+import pandas as pd
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import numpy as np
 
 def get_resource_path(relative_path):
     """ Get the absolute path to a resource in a PyInstaller bundle or script directory. """
@@ -20,7 +24,7 @@ def get_resource_path(relative_path):
     except Exception:
         # When running in normal Python mode (not bundled), use the script directory
         base_path = os.path.dirname(os.path.abspath(__file__))
-        
+
     return os.path.join(base_path, relative_path)
 
 class CSVApp:
@@ -73,12 +77,16 @@ class CSVApp:
         title_label.pack(side="left", padx=20)
 
         def open_github(event=None):
-            webbrowser.open("https://github.com/julienbrandoit/ImplementedPapers")
+            webbrowser.open("https://github.com/julienbrandoit/Spike2Pop---Bridging-Experimental-Neuroscience-and-Computational-Modeling")
 
         github_label = ttk.Label(header_frame, text="GitHub repository - Project Updates", foreground="blue",
                                  cursor="hand2", font=(default_font, 12, "underline"))
         github_label.pack(side="left", padx=10)
         github_label.bind("<Button-1>", open_github)
+
+        # Add GOODBYE! button
+        goodbye_button = ttk.Button(header_frame, text="GOODBYE!", command=root.destroy)
+        goodbye_button.pack(side="right", padx=10)
 
         # Content
         content_frame = ttk.Frame(root, padding=(10, 10))
@@ -140,8 +148,13 @@ class CSVApp:
         action_frame.pack(fill="x", pady=5)
         self.run_button = ttk.Button(action_frame, text="Use the pipeline", command=self.run_pipeline, state=tk.DISABLED)
         self.run_button.pack(side="top", fill="x", pady=2)
+
+        self.sim_panel_button = ttk.Button(action_frame, text="Toward Simulation Panel", command=self.open_simulation_panel, state=tk.DISABLED)
+        self.sim_panel_button.pack(side="top", fill="x", pady=2)
+
         self.kill_button = ttk.Button(action_frame, text="Kill Process", command=self.kill_process, state=tk.DISABLED)
         self.kill_button.pack(side="top", fill="x", pady=2)
+
         self.save_button = ttk.Button(action_frame, text="Save Results", command=self.save_results, state=tk.DISABLED)
         self.save_button.pack(side="top", fill="x", pady=2)
 
@@ -214,6 +227,7 @@ class CSVApp:
             "Spike2Pop - Quick Start Guide\n\n"
             "1. Load a CSV file with at least two columns:\n"
             "   - 'spiking_time': contains spike time data\n"
+            "The format for the spike time sequences should be \"[3045.0, ..., 4444.0]\" (a string with double quotes, square brackets, and comma-separated values).\n"
             "   - 'ID': uniquely identifies each sequence or trial\n\n"
             "2. Select a model:\n"
             "   - STG: stomatogastric ganglion model\n"
@@ -225,6 +239,14 @@ class CSVApp:
             "4. Click 'Use the pipeline' to start the process\n"
             "5. After completion, use 'Save Results' to export data\n"
             "The results is a CSV file that contains the generated population. Each instances is defined by its conductances values along with the corresponding ID.\n\n"
+
+            "Simulation Panel:\n\n"
+            "Once you have generated the population, you can proceed to the simulation panel:\n"
+            "1. Click 'Toward Simulation Panel' to open the simulation panel.\n"
+            "2. Set the simulation duration and step size.\n"
+            "3. Select the IDs you want to simulate by checking the corresponding checkboxes.\n"
+            "4. Click 'SIMULATE!' to start the simulation.\n"
+            "5. After the simulation is complete, you can view the results by clicking 'See Results' for each ID. The trace values are stored along the conductance values for the simulated instances.\n\n"
 
             "\nIf you encounter any issues, please refer to the GitHub repository for documentation and updates.\n"
         )
@@ -273,7 +295,6 @@ class CSVApp:
             messagebox.showerror("Error", f"Failed to save config: {str(e)}")
             self.update_log(f"Failed to save config: {str(e)}")
 
-
     def run_pipeline(self):
         if not self.csv_file or not self.selected_model.get():
             messagebox.showerror("Error", "Please select a CSV file and a model.")
@@ -308,6 +329,7 @@ class CSVApp:
             if stripped_line == "RESULTS_READY":
                 signal_received = True
                 self.root.after(0, lambda: self.save_button.config(state=tk.NORMAL))
+                self.root.after(0, lambda: self.sim_panel_button.config(state=tk.NORMAL))
             else:
                 self.root.after(0, self.update_log, stripped_line)
         for line in self.process.stderr:
@@ -346,10 +368,397 @@ class CSVApp:
         if os.path.exists(self.result_file):
             os.remove(self.result_file)
 
-if __name__ == "__main__":
-    root = tk.Tk() 
-    app = CSVApp(root)
+    def open_simulation_panel(self):
+        panel = tk.Toplevel(self.root)
+        self.sim_panel = panel
+        panel.title("Simulation Panel")
+        panel.geometry("500x600")
 
+        default_font = ("Arial", 12)
+
+        # Title
+        neuron_type = self.selected_model.get()
+        if neuron_type == "STG":
+            neuron_type = "Stomatogastric Ganglion Neuron"
+        elif neuron_type == "DA":
+            neuron_type = "Dopaminergic Neuron"
+        else:
+            raise ValueError("Invalid neuron type selected.")
+
+        title_label = ttk.Label(panel, text=f"Simulation Panel --- {neuron_type}", font=("Arial", 16, "bold"))
+        title_label.pack(pady=(10, 10))
+
+        # Simulation Duration
+        duration_frame = ttk.Frame(panel, padding=10)
+        duration_frame.pack(fill="x")
+        ttk.Label(duration_frame, text="Simulation duration (ms):", font=default_font).pack(side="left")
+        self.sim_duration = tk.DoubleVar(value=4000.0)
+        ttk.Entry(duration_frame, textvariable=self.sim_duration, width=10).pack(side="left", padx=10)
+
+        # Simulation Transitient Duration
+        duration_frame_transient = ttk.Frame(panel, padding=10)
+        duration_frame_transient.pack(fill="x")
+        ttk.Label(duration_frame_transient, text="Transient duration [will be removed] (ms):", font=default_font).pack(side="left")
+        self.sim_duration_trans = tk.DoubleVar(value=2000.0)
+        ttk.Entry(duration_frame_transient, textvariable=self.sim_duration_trans, width=10).pack(side="left", padx=10)
+
+
+        # Step Size
+        step_frame = ttk.Frame(panel, padding=10)
+        step_frame.pack(fill="x")
+        ttk.Label(step_frame, text="Step size (ms):", font=default_font).pack(side="left")
+        self.step_size = tk.DoubleVar(value=0.05)
+        ttk.Entry(step_frame, textvariable=self.step_size, width=10).pack(side="left", padx=10)
+
+        # Horizontal line
+        ttk.Separator(panel, orient="horizontal").pack(fill="x", pady=10)
+
+        # Check/Uncheck all buttons
+        check_frame = ttk.Frame(panel, padding=10)
+        check_frame.pack(fill="x")
+        ttk.Button(check_frame, text="Check All", command=self.check_all).pack(side="left", padx=5)
+        ttk.Button(check_frame, text="Uncheck All", command=self.uncheck_all).pack(side="left", padx=5)
+        simulate_button = ttk.Button(check_frame, text="SIMULATE!", command=self.simulate)
+        simulate_button.pack(side="right", padx=10)
+
+        # Horizontal line
+        ttk.Separator(panel, orient="horizontal").pack(fill="x", pady=10)
+
+        # Scrollable frame placeholder
+        scroll_canvas = tk.Canvas(panel)
+        scroll_frame = ttk.Frame(scroll_canvas)
+        scrollbar = ttk.Scrollbar(panel, orient="vertical", command=scroll_canvas.yview)
+        scroll_canvas.configure(yscrollcommand=scrollbar.set)
+
+        scrollbar.pack(side="right", fill="y")
+        scroll_canvas.pack(side="left", fill="both", expand=True)
+        scroll_canvas.create_window((0, 0), window=scroll_frame, anchor="nw")
+
+        def on_configure(event):
+            scroll_canvas.configure(scrollregion=scroll_canvas.bbox("all"))
+
+        scroll_frame.bind("<Configure>", on_configure)
+
+        def on_mousewheel(event):
+            scroll_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        scroll_canvas.bind_all("<MouseWheel>", on_mousewheel)  # Windows and macOS
+        scroll_canvas.bind_all("<Button-4>", lambda e: scroll_canvas.yview_scroll(-1, "units"))  # Linux scroll up
+        scroll_canvas.bind_all("<Button-5>", lambda e: scroll_canvas.yview_scroll(1, "units"))   # Linux scroll down
+
+        # we load the 'ID' column from the output CSV file
+        try:
+            df = pd.read_csv(self.result_file, usecols=['ID'])
+            # number of time each id appears in the result file
+            ids_count = df['ID'].value_counts()
+            ids = df['ID'].unique()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load result file: {str(e)}")
+            # close the simulation panel
+            panel.destroy()
+            return
+
+        # Create checkbuttons for each ID
+        self.checkbuttons = []
+        self.see_results_buttons = []  # To store references to the "See Results" buttons
+        for idx, id_ in enumerate(ids):
+            id_size_ = ids_count[id_]
+            var = tk.BooleanVar(value=True)
+            checkbutton = ttk.Checkbutton(scroll_frame, text=f"ID [{id_size_} instances]: {id_}", variable=var)
+            checkbutton.grid(row=idx, column=0, sticky="w", padx=10, pady=2)
+            self.checkbuttons.append((id_, var))
+
+            # Create "See Results" button and align it with the checkbox
+            see_results_button = ttk.Button(
+                scroll_frame,
+                text=f"See Results ({id_})",
+                command=lambda id_=id_: self.display_results(id_),
+                state=tk.DISABLED
+            )
+            see_results_button.grid(row=idx, column=1, padx=10, pady=2)
+            self.see_results_buttons.append(see_results_button)
+
+        # Save references to checkbuttons for "check all" logic
+        self.sim_checkboxes = scroll_frame.winfo_children()
+        self.sim_button_exe = simulate_button
+
+    def check_all(self):
+        for cb in getattr(self, 'sim_checkboxes', []):
+            cb.state(['!alternate', 'selected'])
+        for id_, var in self.checkbuttons:
+            var.set(True)
+        self.sim_panel.update_idletasks()
+        self.sim_panel.update()
+
+    def uncheck_all(self):
+        for cb in getattr(self, 'sim_checkboxes', []):
+            cb.state(['!alternate', '!selected'])
+        for id_, var in self.checkbuttons:
+            var.set(False)
+        self.sim_panel.update_idletasks()
+        self.sim_panel.update()
+
+    def simulate(self):
+        selected_ids = [id_ for id_, var in self.checkbuttons if var.get()]
+        selected_ids_str = ",".join(map(str, selected_ids))
+
+        if not selected_ids:
+            messagebox.showwarning("No Selection", "Please select at least one ID for simulation.")
+            return
+
+        # get simulation parameters
+        try:
+            self.sim_duration = float(self.sim_duration.get())
+            self.step_size = float(self.step_size.get())
+            self.sim_duration_trans = float(self.sim_duration_trans.get())
+        except ValueError:
+            messagebox.showerror("Invalid Input", "Please enter valid numbers for simulation duration and step size.")
+            return
+        if self.sim_duration <= 0 or self.step_size <= 0 or self.sim_duration_trans <= 0:
+            messagebox.showerror("Invalid Input", "Simulation duration, step size and transient duration must be positive.")
+            return
+        if self.sim_duration < self.sim_duration_trans:
+            messagebox.showerror("Invalid Input", "Simulation duration must be greater than transient duration.")
+            return
+        # Check if the selected model is valid
+        if self.selected_model.get() not in ["STG", "DA"]:
+            messagebox.showerror("Invalid Model", "Please select a valid model (STG or DA).")
+            return
+
+        # Store parameters for the thread
+        self.sim_args = {
+            "neuron_type": self.selected_model.get(),
+            "num_cpus": self.selected_cpus.get(),
+            "output_file": self.result_file,
+            "selected_ids": selected_ids_str,
+            "sim_duration": self.sim_duration,
+            "sim_duration_trans": self.sim_duration_trans,
+            "step_size": self.step_size
+        }
+
+        #self.root.after(0, lambda: self.sim_panel.destroy())
+        self.root.after(0, lambda: self.sim_panel_button.config(state=tk.DISABLED))
+        self.root.after(0, lambda: self.kill_button.config(state=tk.NORMAL))
+        self.root.after(0, lambda: self.save_button.config(state=tk.DISABLED))
+        self.root.after(0, lambda: self.run_button.config(state=tk.DISABLED))
+
+        self.sim_button_exe.config(state=tk.DISABLED)
+
+        thread = threading.Thread(target=self.execute_simulation, daemon=True)
+        thread.start()
+
+    def display_results(self, id_):
+        # Create a new window to display the plots
+        plot_window = tk.Toplevel(self.root)
+        plot_window.title(f"Results for ID: {id_}")
+        plot_window.geometry("1200x600")
+
+        # Create a scrollable frame to hold the plots
+        scroll_canvas = tk.Canvas(plot_window)
+        scroll_frame = ttk.Frame(scroll_canvas)
+        scrollbar = ttk.Scrollbar(plot_window, orient="vertical", command=scroll_canvas.yview)
+        scroll_canvas.configure(yscrollcommand=scrollbar.set)
+
+        scrollbar.pack(side="right", fill="y")
+        scroll_canvas.pack(side="left", fill="both", expand=True)
+        scroll_canvas.create_window((0, 0), window=scroll_frame, anchor="nw")
+
+        def on_configure(event):
+            scroll_canvas.configure(scrollregion=scroll_canvas.bbox("all"))
+
+        scroll_frame.bind("<Configure>", on_configure)
+
+        def on_mousewheel(event):
+            scroll_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        scroll_canvas.bind_all("<MouseWheel>", on_mousewheel)  # Windows and macOS
+        scroll_canvas.bind_all("<Button-4>", lambda e: scroll_canvas.yview_scroll(-1, "units"))  # Linux scroll up
+        scroll_canvas.bind_all("<Button-5>", lambda e: scroll_canvas.yview_scroll(1, "units"))   # Linux scroll down
+
+        t_eval = np.arange(self.sim_duration_trans, self.sim_duration + self.step_size, self.step_size)
+
+        if self.selected_model.get() == "STG":
+            conductances = ['g_Na', 'g_Kd', 'g_CaT', 'g_CaS', 'g_KCa', 'g_A', 'g_H', 'g_leak']
+        elif self.selected_model.get() == "DA":
+            conductances = ['g_Na', 'g_Kd', 'g_CaL', 'g_CaN', 'g_ERG', 'g_NMDA', 'g_leak']
+        else:
+            messagebox.showerror("Invalid Model", "Please select a valid model (STG or DA).")
+            return
+
+        try:
+            df = pd.read_csv(self.result_file)
+            # Filter the DataFrame for the selected ID
+            filtered_df = df[df['ID'] == id_].dropna(axis=1, how='all')
+            if filtered_df.empty:
+                messagebox.showerror("No Data", f"No data found for ID: {id_}")
+                return
+            V = filtered_df['simulation_V']
+            conductances_values = [filtered_df[conductance] for conductance in conductances]
+            if V.empty:
+                messagebox.showerror("No Data", f"No simulation data found for ID: {id_}")
+                return
+
+            # Also load the original data
+            original_df = pd.read_csv(self.csv_file)
+            original_df = original_df[original_df['ID'] == id_].dropna(axis=1, how='all')
+            if original_df.empty:
+                messagebox.showerror("No Data", f"No original data found for ID: {id_}")
+                return
+            original_sp = original_df['spiking_times']
+            if original_sp.empty:
+                messagebox.showerror("No Data", f"No spiking time data found for ID: {id_}")
+                return
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load result file: {str(e)}")
+            return
+
+        s = len(V)
+
+        # Parse back into list of float
+        V = [np.fromstring(v[1:-1], sep=',') for v in V]
+        original_sp = [np.fromstring(sp[1:-1], sep=',') for sp in original_sp]
+
+        original_sp = np.asarray(original_sp)[0]
+        original_sp = original_sp - original_sp[0] + self.sim_duration_trans
+
+        # Create a plot for the original spiking times and boxplot of scaled conductances
+        fig_original, (ax_original, ax_boxplot) = plt.subplots(1, 2, figsize=(12, 3), gridspec_kw={'width_ratios': [2, 1]})
+
+        # Plot original spiking times
+        ax_original.eventplot(original_sp, lineoffsets=0, linelengths=0.5, color="red", label="Original Spiking Times")
+        ax_original.set_title(f"Original Recording")
+        ax_original.set_xlabel("Time (ms)")
+        ax_original.set_ylabel("")
+        ax_original.set_xlim(self.sim_duration_trans, self.sim_duration)
+        ax_original.set_ylim(-0.5, 0.5)
+
+        # Calculate global max of all conductances across all instances
+        global_max = [filtered_df[cond].astype(float).max() for cond in conductances]
+        global_max = np.asarray(global_max)
+
+        # Prepare data for boxplot
+        scaled_conductances = []
+        for cond in conductances:
+            raw_vals = filtered_df[cond].astype(float).values
+            scaled_vals = raw_vals / global_max[conductances.index(cond)]
+            scaled_conductances.append(scaled_vals)
+
+        # Plot horizontal boxplot of scaled conductances
+        bp = ax_boxplot.boxplot(scaled_conductances, vert=False, labels=[f"{cond} ÷ {global_max[i]:.2f}" for i, cond in enumerate(conductances)], showfliers=False)
+
+
+        # Define a list of colors for the conductances
+        conductance_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f']
+
+
+        # Add scatter plot with jitter
+        for i, cond in enumerate(conductances):
+            y = np.random.normal(i + 1, 0.04, size=len(scaled_conductances[i]))
+            ax_boxplot.scatter(scaled_conductances[i], y, color=conductance_colors[i], alpha=0.5, s=10)
+
+        ax_boxplot.set_title("Boxplot of Scaled Conductances")
+        ax_boxplot.set_xlabel("Scaled Values")
+        ax_boxplot.set_xlim(0, 1.1)
+
+        fig_original.tight_layout()
+        canvas_original = FigureCanvasTkAgg(fig_original, master=scroll_frame)
+        canvas_original.draw()
+        canvas_original.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True, pady=10)
+
+        # Separator after original plot
+        separator = ttk.Separator(scroll_frame, orient='horizontal')
+        separator.pack(fill='x', pady=10)
+
+        for i in range(s):
+            # Create a figure with two subplots: voltage trace and conductance barplot
+            fig_sim, (ax_trace, ax_bar) = plt.subplots(1, 2, figsize=(12, 3), gridspec_kw={'width_ratios': [2, 1]})
+
+            # Plot the voltage trace
+            ax_trace.plot(t_eval, V[i], label=f"Simulation {i+1}", color="blue", linewidth=1)
+            ax_trace.set_title(f"Instance {i+1}")
+            ax_trace.set_xlabel("Time (ms)")
+            ax_trace.set_ylabel("Voltage (mV)")
+            ax_trace.set_xlim(self.sim_duration_trans, self.sim_duration)
+
+            # Prepare and scale conductance values
+            raw_vals = [float(filtered_df[cond].iloc[i]) for cond in conductances]
+
+            raw_vals = np.asarray(raw_vals)
+
+            scaled_vals = raw_vals/global_max
+
+            # Plot conductances as a horizontal bar plot
+            ax_bar.barh(conductances, scaled_vals, color=conductance_colors[:len(conductances)])
+            ax_bar.set_title("Conductances")
+            ax_bar.set_xlim(0, 1)
+            ax_bar.set_xlabel(f"Values (mS/cm²)")
+
+            # yticks should be 'g_i x scaling_factor_i
+            ytick_labels = [f"{cond} ÷ {global_max[i]:.2f}" for i, cond in enumerate(conductances)]
+            ax_bar.set_yticks(np.arange(len(conductances)))
+            ax_bar.set_yticklabels(ytick_labels)
+            ax_bar.set_ylim(-0.5, len(conductances) - 0.5)
+
+            # Render the plot in Tkinter
+            fig_sim.tight_layout()
+            canvas_sim = FigureCanvasTkAgg(fig_sim, master=scroll_frame)
+            canvas_sim.draw()
+            canvas_sim.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True, pady=10)
+
+            # Add a separator
+            separator = ttk.Separator(scroll_frame, orient='horizontal')
+            separator.pack(fill='x', pady=10)
+
+
+    def execute_simulation(self):
+        args = self.sim_args
+        python_exe = self.python_env or sys.executable
+        script_path = get_resource_path("script/main_simulation.py")
+        command = [
+            python_exe,
+            script_path,
+            args["output_file"],
+            args["neuron_type"],
+            str(args["num_cpus"]),
+            args["output_file"],
+            args["selected_ids"],
+            str(args["sim_duration"]),
+            str(args["step_size"]),
+            str(args["sim_duration_trans"])
+        ]
+
+        self.process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        signal_received = False
+
+        self.update_log("Running simulation...")
+
+        for line in self.process.stdout:
+            stripped_line = line.strip()
+            if stripped_line == "RESULTS_READY":
+                signal_received = True
+                self.root.after(0, lambda: self.save_button.config(state=tk.NORMAL))
+                self.root.after(0, lambda: self.sim_panel_button.config(state=tk.NORMAL))
+                # Enable "See Results" buttons for selected IDs
+                for idx, (id_, var) in enumerate(self.checkbuttons):
+                    if var.get():
+                        self.see_results_buttons[idx].config(state=tk.NORMAL)
+            else:
+                self.root.after(0, self.update_log, stripped_line)
+
+        for line in self.process.stderr:
+            self.root.after(0, self.update_log, line.strip())
+
+        self.process.wait()
+        self.process = None
+        self.root.after(0, lambda: self.kill_button.config(state=tk.DISABLED))
+        if not signal_received:
+            self.root.after(0, lambda: self.save_button.config(state=tk.DISABLED))
+        self.root.after(0, lambda: self.run_button.config(state=tk.NORMAL))
+        
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = CSVApp(root)
     root.mainloop()
     print("Application closed.")
     print("Cleaning up temporary files.")

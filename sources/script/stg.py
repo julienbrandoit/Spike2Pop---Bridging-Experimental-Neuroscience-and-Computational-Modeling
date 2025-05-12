@@ -2,7 +2,6 @@ import numpy as np
 from utils import gsigmoid
 from utils import get_w_factors, get_w_factors_constant_tau
 from utils import d_gsigmoid
-from utils import find_first_decreasing_zero_bisection
 from scipy.integrate import solve_ivp
 from utils import gamma_uniform_mean_std_matching
 
@@ -950,69 +949,6 @@ def compute_equilibrium_Ca(alpha, I_Ca, beta):
         The equilibrium calcium concentration at the steady-state (Ca).
     """
     return -alpha * I_Ca + beta
-
-
-def find_V_th_DICs(V, g_Na, g_Kd, g_CaT, g_CaS, g_KCa, g_A, g_H, g_leak,
-             E_Na, E_K, E_H, E_leak, E_Ca, alpha_Ca, beta_Ca, tau_Ca,
-             tau_f_stg = tau_m_Na, tau_s_stg = tau_m_Kd, tau_u_stg = tau_m_H, get_I_static = False, normalize = True, y_tol = 1e-6, x_tol=1e-6, max_iter = 1000, verbose=True):
-    """
-    Find the threshold voltage (V_th) for dynamic input conductances (DICs).
-
-    This function uses a bisection method to find the first voltage where the total conductance
-    (g_t) decreases to zero. It also returns the values of the DICs at this threshold voltage.
-
-    Parameters
-    ----------
-    V : array-like
-        Array of membrane potentials (in mV) to search for the threshold voltage.
-    g_Na, g_Kd, g_CaT, g_CaS, g_KCa, g_A, g_H, g_leak : float
-        Maximum conductances (in mS/cm²) for the respective ion channels.
-    E_Na, E_K, E_H, E_leak, E_Ca : float
-        Reversal potentials (in mV) for the respective ion channels.
-    alpha_Ca : float
-        Scaling factor for calcium influx.
-    beta_Ca : float
-        Rate constant for calcium extrusion.
-    tau_Ca : float
-        Time constant for calcium concentration dynamics.
-    tau_f_stg, tau_s_stg, tau_u_stg : callable, optional
-        Functions to compute the time constants for fast, slow, and ultra-slow dynamics.
-    get_I_static : bool, optional
-        If True, also compute the static current.
-    normalize : bool, optional
-        If True, normalize the sensitivity matrix by the leak conductance.
-    y_tol : float, optional
-        Tolerance for the y-axis (conductance) in the bisection method.
-    x_tol : float, optional
-        Tolerance for the x-axis (voltage) in the bisection method.
-    max_iter : int, optional
-        Maximum number of iterations for the bisection method.
-    verbose : bool, optional
-        If True, print additional information during the bisection process.
-
-    Returns
-    -------
-    V_th : float
-        The threshold voltage where the total conductance decreases to zero.
-    values : tuple
-        A tuple containing the values of the DICs (g_f, g_s, g_u, g_t) at the threshold voltage.
-
-    References
-    ----------
-    Fyon, A., Franci, A., Sacré, P., & Drion, G. (2024). Dimensionality reduction of neuronal degeneracy reveals two interfering physiological mechanisms. PNAS Nexus, 3(10), pgae415. https://doi.org/10.1093/pnasnexus/pgae415
-    """
-    g_t = lambda V_scalar : DICs(np.asarray([V_scalar,]), g_Na, g_Kd, g_CaT, g_CaS, g_KCa, g_A, g_H, g_leak, E_Na, E_K, E_H, E_leak, E_Ca, alpha_Ca, beta_Ca, tau_Ca, tau_f_stg, tau_s_stg, tau_u_stg, False, normalize)[3]
-
-    V_th = find_first_decreasing_zero_bisection(V, g_t, y_tol = y_tol, x_tol=x_tol, max_iter = max_iter, verbose=verbose)
-    V_th = np.asarray([V_th,], dtype=np.float64)
-
-    if V_th is None or np.isnan(V_th):
-        return V_th, (np.atleast_1d(np.nan), np.atleast_1d(np.nan), np.atleast_1d(np.nan), np.atleast_1d(np.nan))
-        
-    values = DICs(V_th, g_Na, g_Kd, g_CaT, g_CaS, g_KCa, g_A, g_H, g_leak, E_Na, E_K, E_H, E_leak, E_Ca, alpha_Ca, beta_Ca, tau_Ca, tau_f_stg, tau_s_stg, tau_u_stg, get_I_static, normalize)
-    
-    return V_th, values
-
 
 # == ODEs == #
 

@@ -21,12 +21,14 @@ Spike2Pop is an open-source application designed to bridge this gap by providing
 - **Compatibility**: Conductance values can be used in various simulators or through the codes developed for this thesis.
 - **Hardware Utilization**: Automatically detects and utilizes available hardware resources, including multiple CPUs and GPUs.
 - **Model Support**: Currently supports Stomatogastric Ganglion (STG) neuron and Dopaminergic (DA) neuron models, with potential for expansion to other neuron models.
+- **Simulation and Visualization**: Simulate the generated populations and visualize the results directly within the application.
 
 ### How It Works
 
-1. **Input**: Provide a CSV file with spike time sequences recorded in the laboratory, each associated with an ID. The format for the spike time sequences should be `"[3045.0, ..., 4444.0]"` (a string with double quotes, square brackets, and comma-separated values).
+1. **Input**: Provide a CSV file with spike time sequences recorded in the laboratory, each associated with an ID. The format for the spike time sequences should be `"[3045.0, ..., 4444.0]"` (a string with double quotes, square brackets, and comma-separated values). You can take a look at the [example CSV file](sources/stg_set.csv) in the source folder.
 2. **Processing**: With a few clicks on the graphical interface, generate populations of the desired size.
-3. **Output**: Obtain and save a CSV file containing all the generated populations associated with the original ID.
+3. **Simulation**: Simulate the generated populations and visualize the results.
+4. **Output**: Obtain and save a CSV file containing all the generated populations associated with the original ID.
 
 ### Getting Started
 
@@ -59,6 +61,22 @@ To get started with Spike2Pop, follow these steps:
 ### Configuration
 
 The application is designed to be flexible and extensible, allowing for the inclusion of custom models and configurations. This enables users to adapt the tool to their specific needs and experimental setups. Detailed instructions and guidelines for adding custom models and configurations will be provided in future updates.
+
+## Simulation and Visualization
+
+### Simulation Panel
+
+Once you have generated the population, you can proceed to the simulation panel:
+
+1. **Open Simulation Panel**: Click 'Toward Simulation Panel' to open the simulation panel.
+2. **Set Simulation Parameters**: Set the simulation duration and step size.
+3. **Select IDs**: Select the IDs you want to simulate by checking the corresponding checkboxes.
+4. **Simulate**: Click 'SIMULATE!' to start the simulation.
+5. **View Results**: After the simulation is complete, you can view the results by clicking 'See Results' for each ID. The trace values are stored along the conductance values for the simulated instances.
+
+### Visualization
+
+The visualization feature allows you to view the simulation results in a graphical format. You can see the original spiking times and the simulated voltage traces for each instance.
 
 ## About the Project
 
