@@ -14,6 +14,13 @@ Despite the potential of computational tools in neuroscience, experimentalists o
 
 Spike2Pop is an open-source application designed to bridge this gap by providing a user-friendly interface for generating populations of degenerate conductance-based models (CBMs) from neuronal spike time recordings. This tool is developed to facilitate the integration of computational neuroscience tools into experimental workflows, making it easier for experimentalists to work with and validate these models.
 
+This solution has been developed as part of my **Master's Thesis** in Biomedical Engineering. More technical details can be found in the [Master's Thesis Repository](https://github.com/julienbrandoit/master-thesis-automatic-degenerate-cbm)
+
+
+![Pipeline for generating degenerate conductance-based models from neuronal spike times recording.](images/main_figure.png)
+<p align="center"><em>Figure: Pipeline for generating degenerate conductance-based models from neuronal spike times recording.</em></p>
+
+
 ### Key Features
 
 - **User-Friendly Interface**: Designed for experimentalists without requiring technical expertise in coding or deep learning.
