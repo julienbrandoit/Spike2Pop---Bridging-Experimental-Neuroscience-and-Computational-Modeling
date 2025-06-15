@@ -55,6 +55,7 @@ To get started with Spike2Pop, follow these steps:
 
 2. **Run the Application**:
    ```bash
+   cd sources
    python spike2pop.py
    ```
 
