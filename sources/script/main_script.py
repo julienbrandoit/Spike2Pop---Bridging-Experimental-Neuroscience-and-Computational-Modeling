@@ -167,6 +167,17 @@ def forward_model(model, data, device, batch_size=512):
     return data
 
 def process_row_stg(row):
+        import random
+        import numpy as np
+        import time
+        import os
+
+        # 🌱 Set safe seed
+        MAX_SEED = 2**32 - 1
+        seed = (int(time.time() * 1e6) ^ os.getpid()) % MAX_SEED
+        np.random.seed(seed)
+        random.seed(seed)
+
         population_size, vth, row = row
         ID = row['ID']
         g_s_hat = row['g_s_hat']
@@ -176,6 +187,17 @@ def process_row_stg(row):
         return population
 
 def process_row_da(row):
+    import random
+    import numpy as np
+    import time
+    import os
+
+    # 🌱 Set safe seed
+    MAX_SEED = 2**32 - 1
+    seed = (int(time.time() * 1e6) ^ os.getpid()) % MAX_SEED
+    np.random.seed(seed)
+    random.seed(seed)
+
     population_size, vth, row = row
     ID = row['ID']
     g_s_hat = row['g_s_hat']

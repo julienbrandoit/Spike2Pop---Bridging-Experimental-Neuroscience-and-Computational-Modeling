@@ -2,7 +2,7 @@ import sys
 import os
 import pandas as pd
 import numpy as np
-from utils import simulate_population_t_eval_multiprocessing
+from utils import simulate_population_t_eval_multiprocessing, get_spiking_times
 import da
 import stg
 import warnings
@@ -30,6 +30,7 @@ def main():
     T = float(sys.argv[6])
     dt = float(sys.argv[7])
     t_transient = float(sys.argv[8])
+    save_full_traces = sys.argv[9].lower() == 'true'
 
     # Your simulation code here...
     print(f"Running simulation for {neuron_type} with {num_cpus} CPUs; T = {T}, dt = {dt}")
@@ -94,7 +95,12 @@ def main():
     # We add the results to the dataframe
     for i in range(len(data_ids)):
         print(f"Post Processing {i+1}/{len(data_ids)}", flush=True)
-        data.at[data_idx[i], 'simulation_V'] = str(results[i][1].tolist())
+        if save_full_traces:
+            # Save the full trace as a string representation of the list
+            data.at[data_idx[i], 'simulation_V'] = str(results[i][1].tolist())
+        else:
+            # Save only the spike times
+            data.at[data_idx[i], 'spiking_times'] = str(get_spiking_times(t_eval, results[i][1])[1].tolist())
 
     # Finally we save the new version of the csv file into output_file
     data.to_csv(output_file, index=False)

@@ -416,8 +416,20 @@ class CSVApp:
         # Check/Uncheck all buttons
         check_frame = ttk.Frame(panel, padding=10)
         check_frame.pack(fill="x")
+
         ttk.Button(check_frame, text="Check All", command=self.check_all).pack(side="left", padx=5)
         ttk.Button(check_frame, text="Uncheck All", command=self.uncheck_all).pack(side="left", padx=5)
+
+        # Save Full Traces Checkbox (to the left of SIMULATE!)
+        self.save_full_traces = tk.BooleanVar(value=False)
+        self.save_full_traces_checkbox = ttk.Checkbutton(
+            check_frame,
+            text="Save full traces",
+            variable=self.save_full_traces
+        )
+        self.save_full_traces_checkbox.pack(side="right", padx=10)
+
+        # Simulate button
         simulate_button = ttk.Button(check_frame, text="SIMULATE!", command=self.simulate)
         simulate_button.pack(side="right", padx=10)
 
@@ -511,6 +523,7 @@ class CSVApp:
             self.sim_duration = float(self.sim_duration.get())
             self.step_size = float(self.step_size.get())
             self.sim_duration_trans = float(self.sim_duration_trans.get())
+            self.save_full_traces_value = self.save_full_traces.get()
         except ValueError:
             messagebox.showerror("Invalid Input", "Please enter valid numbers for simulation duration and step size.")
             return
@@ -533,7 +546,8 @@ class CSVApp:
             "selected_ids": selected_ids_str,
             "sim_duration": self.sim_duration,
             "sim_duration_trans": self.sim_duration_trans,
-            "step_size": self.step_size
+            "step_size": self.step_size,
+            "save_full_traces": self.save_full_traces_value
         }
 
         #self.root.after(0, lambda: self.sim_panel.destroy())
@@ -541,7 +555,9 @@ class CSVApp:
         self.root.after(0, lambda: self.kill_button.config(state=tk.NORMAL))
         self.root.after(0, lambda: self.save_button.config(state=tk.DISABLED))
         self.root.after(0, lambda: self.run_button.config(state=tk.DISABLED))
-
+        #disable the save full traces checkbox
+        self.root.after(0, lambda: self.save_full_traces_checkbox.state(['disabled']))
+        
         self.sim_button_exe.config(state=tk.DISABLED)
 
         thread = threading.Thread(target=self.execute_simulation, daemon=True)
@@ -592,11 +608,17 @@ class CSVApp:
             if filtered_df.empty:
                 messagebox.showerror("No Data", f"No data found for ID: {id_}")
                 return
-            V = filtered_df['simulation_V']
-            conductances_values = [filtered_df[conductance] for conductance in conductances]
-            if V.empty:
-                messagebox.showerror("No Data", f"No simulation data found for ID: {id_}")
-                return
+            if self.save_full_traces_value:
+                V = filtered_df['simulation_V']
+                if V.empty:
+                    messagebox.showerror("No Data", f"No simulation data found for ID: {id_}")
+                    return
+            else:
+                V = filtered_df['spiking_times']
+                if V.empty:
+                    messagebox.showerror("No Data", f"No spiking time data found for ID: {id_}")
+                    return
+
 
             # Also load the original data
             original_df = pd.read_csv(self.csv_file)
@@ -675,11 +697,18 @@ class CSVApp:
             fig_sim, (ax_trace, ax_bar) = plt.subplots(1, 2, figsize=(12, 3), gridspec_kw={'width_ratios': [2, 1]})
 
             # Plot the voltage trace
-            ax_trace.plot(t_eval, V[i], label=f"Simulation {i+1}", color="blue", linewidth=1)
-            ax_trace.set_title(f"Instance {i+1}")
-            ax_trace.set_xlabel("Time (ms)")
-            ax_trace.set_ylabel("Voltage (mV)")
-            ax_trace.set_xlim(self.sim_duration_trans, self.sim_duration)
+            if self.save_full_traces_value:
+                ax_trace.plot(t_eval, V[i], label=f"Simulation {i+1}", color="blue", linewidth=1)
+                ax_trace.set_title(f"Instance {i+1}")
+                ax_trace.set_xlabel("Time (ms)")
+                ax_trace.set_ylabel("Voltage (mV)")
+                ax_trace.set_xlim(self.sim_duration_trans, self.sim_duration)
+            else:
+                ax_trace.eventplot(V[i], lineoffsets=0, linelengths=0.5, color="blue", label=f"Simulation {i+1}")
+                ax_trace.set_title(f"Spiking Times for Instance {i+1}")
+                ax_trace.set_xlabel("Time (ms)")
+                ax_trace.set_ylabel("")
+                ax_trace.set_xlim(self.sim_duration_trans, self.sim_duration)
 
             # Prepare and scale conductance values
             raw_vals = [float(filtered_df[cond].iloc[i]) for cond in conductances]
@@ -711,6 +740,177 @@ class CSVApp:
             separator.pack(fill='x', pady=10)
 
 
+    def display_results__temp(self, id_):
+        # Create a new window to display the plots
+        plot_window = tk.Toplevel(self.root)
+        plot_window.title(f"Results for ID: {id_}")
+        plot_window.geometry("1200x600")
+
+        # Create a scrollable frame to hold the plots
+        scroll_canvas = tk.Canvas(plot_window)
+        scroll_frame = ttk.Frame(scroll_canvas)
+        scrollbar = ttk.Scrollbar(plot_window, orient="vertical", command=scroll_canvas.yview)
+        scroll_canvas.configure(yscrollcommand=scrollbar.set)
+
+        scrollbar.pack(side="right", fill="y")
+        scroll_canvas.pack(side="left", fill="both", expand=True)
+        scroll_canvas.create_window((0, 0), window=scroll_frame, anchor="nw")
+
+        def on_configure(event):
+            scroll_canvas.configure(scrollregion=scroll_canvas.bbox("all"))
+
+        scroll_frame.bind("<Configure>", on_configure)
+
+        def on_mousewheel(event):
+            scroll_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        scroll_canvas.bind_all("<MouseWheel>", on_mousewheel)  # Windows and macOS
+        scroll_canvas.bind_all("<Button-4>", lambda e: scroll_canvas.yview_scroll(-1, "units"))  # Linux scroll up
+        scroll_canvas.bind_all("<Button-5>", lambda e: scroll_canvas.yview_scroll(1, "units"))   # Linux scroll down
+
+        t_eval = np.arange(self.sim_duration_trans, self.sim_duration + self.step_size, self.step_size)
+
+        if self.selected_model.get() == "STG":
+            conductances = ['g_Na', 'g_Kd', 'g_CaT', 'g_CaS', 'g_KCa', 'g_A', 'g_H', 'g_leak']
+        elif self.selected_model.get() == "DA":
+            conductances = ['g_Na', 'g_Kd', 'g_CaL', 'g_CaN', 'g_ERG', 'g_NMDA', 'g_leak']
+        else:
+            messagebox.showerror("Invalid Model", "Please select a valid model (STG or DA).")
+            return
+
+        try:
+            df = pd.read_csv(self.result_file)
+            filtered_df = df[df['ID'] == id_].dropna(axis=1, how='all')
+            if filtered_df.empty:
+                messagebox.showerror("No Data", f"No data found for ID: {id_}")
+                return
+            V = filtered_df['simulation_V']
+
+            # Also load the original data
+            original_df = pd.read_csv(self.csv_file)
+            original_df = original_df[original_df['ID'] == id_].dropna(axis=1, how='all')
+            if original_df.empty:
+                messagebox.showerror("No Data", f"No original data found for ID: {id_}")
+                return
+            original_sp = original_df['spiking_times']
+            if original_sp.empty:
+                messagebox.showerror("No Data", f"No spiking time data found for ID: {id_}")
+                return
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load result file: {str(e)}")
+            return
+
+        s = len(V)
+
+        # Parse original spiking times into array
+        original_sp = [np.fromstring(sp[1:-1], sep=',') for sp in original_sp]
+        original_sp = np.asarray(original_sp)[0]
+        original_sp = original_sp - original_sp[0] + self.sim_duration_trans
+
+        # Plot original spiking times and boxplot of conductances
+        fig_original, (ax_original, ax_boxplot) = plt.subplots(1, 2, figsize=(12, 3), gridspec_kw={'width_ratios': [2, 1]})
+
+        ax_original.eventplot(original_sp, lineoffsets=0, linelengths=0.5, color="red", label="Original Spiking Times")
+        ax_original.set_title(f"Original Recording")
+        ax_original.set_xlabel("Time (ms)")
+        ax_original.set_ylabel("")
+        ax_original.set_xlim(self.sim_duration_trans, self.sim_duration)
+        ax_original.set_ylim(-0.5, 0.5)
+
+        global_max = [filtered_df[cond].astype(float).max() for cond in conductances]
+        global_max = np.asarray(global_max)
+
+        scaled_conductances = []
+        for cond in conductances:
+            raw_vals = filtered_df[cond].astype(float).values
+            scaled_vals = raw_vals / global_max[conductances.index(cond)]
+            scaled_conductances.append(scaled_vals)
+
+        bp = ax_boxplot.boxplot(scaled_conductances, vert=False,
+                            labels=[f"{cond} ÷ {global_max[i]:.2f}" for i, cond in enumerate(conductances)],
+                            showfliers=False)
+
+        conductance_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f']
+
+        for i, cond in enumerate(conductances):
+            y = np.random.normal(i + 1, 0.04, size=len(scaled_conductances[i]))
+            ax_boxplot.scatter(scaled_conductances[i], y, color=conductance_colors[i], alpha=0.5, s=10)
+
+        ax_boxplot.set_title("Boxplot of Scaled Conductances")
+        ax_boxplot.set_xlabel("Scaled Values")
+        ax_boxplot.set_xlim(0, 1.1)
+
+        fig_original.tight_layout()
+        canvas_original = FigureCanvasTkAgg(fig_original, master=scroll_frame)
+        canvas_original.draw()
+        canvas_original.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True, pady=10)
+
+        separator = ttk.Separator(scroll_frame, orient='horizontal')
+        separator.pack(fill='x', pady=10)
+
+        # Now iterate over instances and plot voltage trace or spiking times based on save_full_traces_value
+        for i in range(s):
+            if self.save_full_traces_value:
+                # Parse voltage trace array if possible, else empty array
+                v_str = V.iloc[i] if hasattr(V, 'iloc') else V[i]
+                V_i = np.fromstring(v_str[1:-1], sep=',') if isinstance(v_str, str) and len(v_str) > 2 else np.array([])
+
+                if V_i.size > 0:
+                    fig_sim, (ax_trace, ax_bar) = plt.subplots(1, 2, figsize=(12, 3), gridspec_kw={'width_ratios': [2, 1]})
+
+                    ax_trace.plot(t_eval, V_i, label=f"Simulation {i+1}", color="blue", linewidth=1)
+                    ax_trace.set_title(f"Instance {i+1}")
+                    ax_trace.set_xlabel("Time (ms)")
+                    ax_trace.set_ylabel("Voltage (mV)")
+                    ax_trace.set_xlim(self.sim_duration_trans, self.sim_duration)
+
+                    raw_vals = [float(filtered_df[cond].iloc[i]) for cond in conductances]
+                    raw_vals = np.asarray(raw_vals)
+                    scaled_vals = raw_vals / global_max
+
+                    ax_bar.barh(conductances, scaled_vals, color=conductance_colors[:len(conductances)])
+                    ax_bar.set_title("Conductances")
+                    ax_bar.set_xlim(0, 1)
+                    ax_bar.set_xlabel(f"Values (mS/cm²)")
+
+                    ytick_labels = [f"{cond} ÷ {global_max[j]:.2f}" for j, cond in enumerate(conductances)]
+                    ax_bar.set_yticks(np.arange(len(conductances)))
+                    ax_bar.set_yticklabels(ytick_labels)
+                    ax_bar.set_ylim(-0.5, len(conductances) - 0.5)
+
+                    fig_sim.tight_layout()
+                    canvas_sim = FigureCanvasTkAgg(fig_sim, master=scroll_frame)
+                    canvas_sim.draw()
+                    canvas_sim.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True, pady=10)
+
+                    separator = ttk.Separator(scroll_frame, orient='horizontal')
+                    separator.pack(fill='x', pady=10)
+                    continue  # skip spiking times plot for this instance if trace is shown
+
+            # If full traces not saved or empty trace, plot spiking times eventplot
+            spiking_times_str = filtered_df['spiking_times'].iloc[i]
+            spiking_times_arr = np.fromstring(spiking_times_str[1:-1], sep=',') if isinstance(spiking_times_str, str) else np.array([])
+
+            if spiking_times_arr.size > 0:
+                spiking_times_arr = spiking_times_arr - spiking_times_arr[0] + self.sim_duration_trans
+
+            fig_sp, ax_sp = plt.subplots(figsize=(12, 2))
+            ax_sp.eventplot(spiking_times_arr, lineoffsets=0, linelengths=0.5, color='blue', label=f"Spiking Times Instance {i+1}")
+            ax_sp.set_title(f"Spiking Times Instance {i+1} (No full trace saved)")
+            ax_sp.set_xlabel("Time (ms)")
+            ax_sp.set_yticks([])
+            ax_sp.set_xlim(self.sim_duration_trans, self.sim_duration)
+
+            fig_sp.tight_layout()
+            canvas_sp = FigureCanvasTkAgg(fig_sp, master=scroll_frame)
+            canvas_sp.draw()
+            canvas_sp.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True, pady=10)
+
+            separator = ttk.Separator(scroll_frame, orient='horizontal')
+            separator.pack(fill='x', pady=10)
+
+
     def execute_simulation(self):
         args = self.sim_args
         python_exe = self.python_env or sys.executable
@@ -725,7 +925,8 @@ class CSVApp:
             args["selected_ids"],
             str(args["sim_duration"]),
             str(args["step_size"]),
-            str(args["sim_duration_trans"])
+            str(args["sim_duration_trans"]),
+            str(args["save_full_traces"])
         ]
 
         self.process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)

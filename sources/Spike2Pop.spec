@@ -24,7 +24,9 @@ a = Analysis(
         'scipy.sparse',    # Unused parts of SciPy
         'scipy.optimize',  # If not used directly
         'scipy.stats',     # If not used directly
-        'PyQt5',           # May be pulled in by matplotlib
+        'PyQt5',
+        'PyQt6',
+        'PySide6',           # May be pulled in by matplotlib
         'PySide2',         # Same as above
         'matplotlib.backends.backend_pdf',  # Unused backends
         'matplotlib.backends.backend_ps',   # Unused backends
