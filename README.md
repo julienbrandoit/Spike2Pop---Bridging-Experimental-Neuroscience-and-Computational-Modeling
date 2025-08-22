@@ -96,7 +96,7 @@ The visualization feature allows you to view the simulation results in a graphic
 
 ## About the Project
 
-This application was developed as part of my **Master's Thesis** during my Master of Science in Biomedical Engineering. It represents my first full software project, aimed at making computational tools more accessible to experimental neuroscientists. Once published, you will be able to access the full thesis here: **[link to be added once released]**.
+This application was developed as part of my **Master's Thesis** during my Master of Science in Biomedical Engineering. It represents my first full software project, aimed at making computational tools more accessible to experimental neuroscientists. Once published, you will be able to access the full thesis here: **[A Deep Learning Method for Fast Generation of Degenerate High-Dimensional Conductance-Based Populations from Neuronal Spike Times](http://hdl.handle.net/2268.2/23306)**.
 
 As this is my first time building and releasing an application, **feedback is very welcome** — whether it's about usability, features, bugs, or suggestions for improvement.
 
